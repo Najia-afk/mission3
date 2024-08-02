@@ -1,26 +1,12 @@
-from scripts.df_generator import get_dataset_directory, check_directory_exists, load_and_process_data
+from scripts.df_generator import get_dataset_directory, check_directory_exists, load_or_cache_dataframes
 from scripts.df_metadata import display_metadata_dfs, create_metadata_dfs
+from scripts.fetch_data_fields import fetch_and_compare_data_fields
 import os
 import pandas as pd
 
 CACHE_DIR = 'data/cache'  # Directory to store cached DataFrames
 
-def load_or_cache_dataframes(dataset_directory):
-    # If cache exists, load from cache
-    if os.path.exists(CACHE_DIR):
-        print("Loading DataFrames from cache...")
-        dfs = {file_name: pd.read_pickle(os.path.join(CACHE_DIR, file_name)) for file_name in os.listdir(CACHE_DIR)}
-    else:
-        # Load and preprocess files into DataFrames
-        print("Loading DataFrames from source files...")
-        dfs = load_and_process_data(dataset_directory)
-        
-        # Save DataFrames to cache for future use
-        os.makedirs(CACHE_DIR, exist_ok=True)
-        for name, df in dfs.items():
-            df.to_pickle(os.path.join(CACHE_DIR, name))
-    
-    return dfs
+
 
 def main():
     # Define the dataset directory
@@ -33,7 +19,7 @@ def main():
         return
 
     # Load DataFrames from cache or source files
-    dfs = load_or_cache_dataframes(dataset_directory)
+    dfs = load_or_cache_dataframes(dataset_directory, CACHE_DIR)
 
     # Create metadata DataFrames
     metadata_dfs = create_metadata_dfs(dfs)
@@ -51,5 +37,8 @@ def main():
 
     print(f"Metadata saved to {combined_metadata_path}")
 
+    # Run the fetch and compare data fields script
+    fetch_and_compare_data_fields()
+    
 if __name__ == "__main__":
     main()

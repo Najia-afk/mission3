@@ -1,3 +1,5 @@
 mission3_venv/
 data/
 Dataset/
+src/__pycache__/
+src/scripts/__pycache__/

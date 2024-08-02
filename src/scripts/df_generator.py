@@ -65,3 +65,20 @@ def load_and_process_data(directory):
             print(f"An error occurred while processing file '{file}': {e}")
     
     return dfs
+
+def load_or_cache_dataframes(dataset_directory, CACHE_DIR):
+    # If cache exists, load from cache
+    if os.path.exists(CACHE_DIR):
+        print("Loading DataFrames from cache...")
+        dfs = {file_name: pd.read_pickle(os.path.join(CACHE_DIR, file_name)) for file_name in os.listdir(CACHE_DIR)}
+    else:
+        # Load and preprocess files into DataFrames
+        print("Loading DataFrames from source files...")
+        dfs = load_and_process_data(dataset_directory)
+        
+        # Save DataFrames to cache for future use
+        os.makedirs(CACHE_DIR, exist_ok=True)
+        for name, df in dfs.items():
+            df.to_pickle(os.path.join(CACHE_DIR, name))
+    
+    return dfs

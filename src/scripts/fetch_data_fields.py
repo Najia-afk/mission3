@@ -1,0 +1,81 @@
+import os
+import requests
+from datetime import datetime
+import pandas as pd
+import requests
+
+DATA_DIR = 'data'
+HISTORY_DIR = os.path.join(DATA_DIR, 'history')
+DIFF_DIR = os.path.join(DATA_DIR, 'diffs')
+LATEST_FILE_PATH = os.path.join(DATA_DIR, 'data_fields.txt')
+DATA_FIELDS_URL = 'https://world.openfoodfacts.org/data/data-fields.txt'
+
+os.makedirs(HISTORY_DIR, exist_ok=True)
+os.makedirs(DIFF_DIR, exist_ok=True)
+
+def fetch_data(url):
+    response = requests.get(url)
+    response.raise_for_status()
+    return response.text
+
+def save_data(content, path):
+    with open(path, 'w') as file:
+        file.write(content)
+
+def load_data(path):
+    if os.path.exists(path):
+        with open(path, 'r') as file:
+            return file.readlines()
+    return None
+
+def compare_data(old_data, new_data):
+    if old_data is None:
+        print("No previous version found. This is the first fetch.")
+        return new_data, []
+    
+    old_set = set(old_data)
+    new_set = set(new_data)
+    
+    added_lines = new_set - old_set
+    removed_lines = old_set - new_set
+
+    return added_lines, removed_lines
+
+def save_diff(added_lines, removed_lines, version1, version2, format='csv'):
+    diff_data = []
+    for line in added_lines:
+        diff_data.append({"Change": "Added", "Line": line.strip()})
+    
+    for line in removed_lines:
+        diff_data.append({"Change": "Removed", "Line": line.strip()})
+    
+    df = pd.DataFrame(diff_data)
+    timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+    diff_filename = f'diff_{version1}_vs_{version2}_{timestamp}.{format}'
+    diff_filepath = os.path.join(DIFF_DIR, diff_filename)
+    
+    if format == 'csv':
+        df.to_csv(diff_filepath, index=False)
+    elif format == 'json':
+        df.to_json(diff_filepath, orient='records', lines=True)
+    
+    print(f"Diff saved to {diff_filepath}")
+
+def fetch_and_compare_data_fields():
+    latest_data = fetch_data(DATA_FIELDS_URL).splitlines()
+    previous_data = load_data(LATEST_FILE_PATH)
+    
+    timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+    latest_file_with_timestamp = os.path.join(HISTORY_DIR, f'data_fields_{timestamp}.txt')
+    save_data('\n'.join(latest_data), latest_file_with_timestamp)
+    
+    added_lines, removed_lines = compare_data(previous_data, latest_data)
+    
+    if added_lines or removed_lines:
+        version1 = os.path.basename(LATEST_FILE_PATH)
+        version2 = os.path.basename(latest_file_with_timestamp)
+        save_diff(added_lines, removed_lines, version1, version2, format='csv')
+    else:
+        print("No changes detected.")
+
+    save_data('\n'.join(latest_data), LATEST_FILE_PATH)
