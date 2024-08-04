@@ -2,7 +2,7 @@ import os
 import requests
 from datetime import datetime
 import pandas as pd
-import requests
+import hashlib
 
 DATA_DIR = 'data'
 HISTORY_DIR = os.path.join(DATA_DIR, 'history')
@@ -25,21 +25,31 @@ def save_data(content, path):
 def load_data(path):
     if os.path.exists(path):
         with open(path, 'r') as file:
-            return file.readlines()
+            return file.read()
     return None
+
+def hash_data(data):
+    return hashlib.md5(data.encode('utf-8')).hexdigest()
 
 def compare_data(old_data, new_data):
     if old_data is None:
         print("No previous version found. This is the first fetch.")
-        return new_data, []
-    
-    old_set = set(old_data)
-    new_set = set(new_data)
-    
-    added_lines = new_set - old_set
-    removed_lines = old_set - new_set
+        return True, new_data.splitlines(), []
 
-    return added_lines, removed_lines
+    old_hash = hash_data(old_data)
+    new_hash = hash_data(new_data)
+
+    if old_hash == new_hash:
+        print("No changes detected.")
+        return False, [], []
+
+    old_lines = set(old_data.splitlines())
+    new_lines = set(new_data.splitlines())
+    
+    added_lines = new_lines - old_lines
+    removed_lines = old_lines - new_lines
+
+    return True, added_lines, removed_lines
 
 def save_diff(added_lines, removed_lines, version1, version2, format='csv'):
     diff_data = []
@@ -62,20 +72,22 @@ def save_diff(added_lines, removed_lines, version1, version2, format='csv'):
     print(f"Diff saved to {diff_filepath}")
 
 def fetch_and_compare_data_fields():
-    latest_data = fetch_data(DATA_FIELDS_URL).splitlines()
+    latest_data = fetch_data(DATA_FIELDS_URL)
     previous_data = load_data(LATEST_FILE_PATH)
     
     timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
     latest_file_with_timestamp = os.path.join(HISTORY_DIR, f'data_fields_{timestamp}.txt')
-    save_data('\n'.join(latest_data), latest_file_with_timestamp)
+    save_data(latest_data, latest_file_with_timestamp)
     
-    added_lines, removed_lines = compare_data(previous_data, latest_data)
+    has_changes, added_lines, removed_lines = compare_data(previous_data, latest_data)
     
-    if added_lines or removed_lines:
+    if has_changes:
         version1 = os.path.basename(LATEST_FILE_PATH)
         version2 = os.path.basename(latest_file_with_timestamp)
         save_diff(added_lines, removed_lines, version1, version2, format='csv')
-    else:
-        print("No changes detected.")
 
-    save_data('\n'.join(latest_data), LATEST_FILE_PATH)
+    # Update the latest file with the new data
+    save_data(latest_data, LATEST_FILE_PATH)
+
+if __name__ == "__main__":
+    fetch_and_compare_data_fields()

@@ -6,8 +6,6 @@ import pandas as pd
 
 CACHE_DIR = 'data/cache'  # Directory to store cached DataFrames
 
-
-
 def main():
     # Define the dataset directory
     notebook_directory = os.getcwd()
@@ -18,11 +16,29 @@ def main():
         print(f"Error: Directory '{dataset_directory}' does not exist.")
         return
 
+    # Optionally, you can define a list of specific files to process
+    # specific_files = ['file1.csv', 'file2.csv']
+    specific_files = None  # Set to None to process all files
+
     # Load DataFrames from cache or source files
-    dfs = load_or_cache_dataframes(dataset_directory, CACHE_DIR)
+    dfs = load_or_cache_dataframes(dataset_directory, CACHE_DIR, file_list=specific_files, separator='\t')
+
+    # Check if DataFrames are loaded
+    if not dfs:
+        print("No DataFrames were loaded. Exiting.")
+        return
+
+    print(f"Loaded DataFrames: {list(dfs.keys())}")
 
     # Create metadata DataFrames
     metadata_dfs = create_metadata_dfs(dfs)
+
+    # Check if metadata DataFrames were created
+    if not metadata_dfs:
+        print("No metadata DataFrames were created. Exiting.")
+        return
+
+    print(f"Created Metadata DataFrames: {list(metadata_dfs.keys())}")
 
     # Optionally, show loaded DataFrames
     display_metadata_dfs(metadata_dfs)
@@ -39,6 +55,6 @@ def main():
 
     # Run the fetch and compare data fields script
     fetch_and_compare_data_fields()
-    
+
 if __name__ == "__main__":
     main()

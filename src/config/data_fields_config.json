@@ -1,0 +1,458 @@
+{
+    "general_information:": {
+        "description": "",
+        "fields": {
+            "code": {
+                "type": "string",
+                "description": "barcode of the product (can be EAN-13 or internal codes for some food stores), for products without a barcode, Open Food Facts assigns a number starting with the 200 reserved prefix"
+            },
+            "url": {
+                "type": "string",
+                "description": "url of the product page on Open Food Facts"
+            },
+            "creator": {
+                "type": "string",
+                "description": "contributor who first added the product"
+            },
+            "created_t": {
+                "type": "unix_timestamp",
+                "description": "date that the product was added (UNIX timestamp format)"
+            },
+            "created_datetime": {
+                "type": "iso8601_datetime",
+                "description": "date that the product was added (iso8601 format: yyyy-mm-ddThh:mn:ssZ)"
+            },
+            "last_modified_t": {
+                "type": "unix_timestamp",
+                "description": "date that the product page was last modified"
+            },
+            "last_modified_datetime": {
+                "type": "iso8601_datetime"
+            },
+            "product_name": {
+                "type": "string",
+                "description": "name of the product"
+            },
+            "generic_name": {
+                "type": "string"
+            },
+            "quantity": {
+                "type": "string",
+                "description": "quantity and unit"
+            }
+        }
+    },
+    "tags:": {
+        "description": "",
+        "fields": {
+            "packaging": {
+                "type": "string",
+                "description": "shape, material"
+            },
+            "packaging_tags": {
+                "type": "string",
+                "sub-type": "tags"
+            },
+            "brands": {
+                "type": "string"
+            },
+            "brands_tags": {
+                "type": "string",
+                "sub-type": "tags"
+            },
+            "categories": {
+                "type": "string"
+            },
+            "categories_tags": {
+                "type": "string",
+                "sub-type": "tags"
+            },
+            "categories_fr": {
+                "type": "string",
+                "sub-type": "tags"
+            },
+            "origins": {
+                "type": "string",
+                "description": "origins of ingredients"
+            },
+            "origins_tags": {
+                "type": "string",
+                "sub-type": "tags"
+            },
+            "manufacturing_places": {
+                "type": "string",
+                "description": "places where manufactured or transformed"
+            },
+            "manufacturing_places_tags": {
+                "type": "string",
+                "sub-type": "tags"
+            },
+            "labels": {
+                "type": "string"
+            },
+            "labels_tags": {
+                "type": "string",
+                "sub-type": "tags"
+            },
+            "labels_fr": {
+                "type": "string",
+                "sub-type": "tags"
+            },
+            "emb_codes": {
+                "type": "string"
+            },
+            "emb_codes_tags": {
+                "type": "string",
+                "sub-type": "tags"
+            },
+            "first_packaging_code_geo": {
+                "type": "string",
+                "description": "coordinates corresponding to the first packaging code indicated"
+            },
+            "cities": {
+                "type": "string"
+            },
+            "cities_tags": {
+                "type": "string",
+                "sub-type": "tags"
+            },
+            "purchase_places": {
+                "type": "string"
+            },
+            "stores": {
+                "type": "string"
+            },
+            "countries": {
+                "type": "string",
+                "description": "list of countries where the product is sold"
+            },
+            "countries_tags": {
+                "type": "string",
+                "sub-type": "tags"
+            },
+            "countries_fr": {
+                "type": "string",
+                "sub-type": "tags"
+            }
+        }
+    },
+    "ingredients:": {
+        "description": "",
+        "fields": {
+            "ingredients_text": {
+                "type": "string"
+            },
+            "traces": {
+                "type": "string"
+            },
+            "traces_tags": {
+                "type": "string",
+                "sub-type": "tags"
+            }
+        }
+    },
+    "misc._data:": {
+        "description": "",
+        "fields": {
+            "serving_size": {
+                "type": "string",
+                "description": "serving size in g"
+            },
+            "no_nutriments": {
+                "type": "string",
+                "description": "indicates if the nutrition facts are indicated on the food label"
+            },
+            "additives_n": {
+                "type": "string",
+                "description": "number of food additives"
+            },
+            "additives": {
+                "type": "string"
+            },
+            "additives_tags": {
+                "type": "string",
+                "sub-type": "tags"
+            },
+            "ingredients_from_palm_oil_n": {
+                "type": "string"
+            },
+            "ingredients_from_palm_oil": {
+                "type": "string"
+            },
+            "ingredients_from_palm_oil_tags": {
+                "type": "string",
+                "sub-type": "tags"
+            },
+            "ingredients_that_may_be_from_palm_oil_n": {
+                "type": "string"
+            },
+            "ingredients_that_may_be_from_palm_oil": {
+                "type": "string"
+            },
+            "ingredients_that_may_be_from_palm_oil_tags": {
+                "type": "string",
+                "sub-type": "tags"
+            },
+            "nutrition_grade_fr": {
+                "type": "string",
+                "description": "nutrition grade ('a' to 'e'). see https://fr.openfoodfacts.org/nutriscore",
+                "sub-type": "tags"
+            },
+            "main_category": {
+                "type": "string"
+            },
+            "main_category_fr": {
+                "type": "string",
+                "sub-type": "tags"
+            },
+            "image_url": {
+                "type": "string"
+            },
+            "image_small_url": {
+                "type": "string"
+            }
+        }
+    },
+    "nutrition_facts:": {
+        "description": "",
+        "fields": {
+            "energy_100g": {
+                "type": "float"
+            },
+            "energy": {
+                "type": "string"
+            },
+            "proteins_100g": {
+                "type": "float"
+            },
+            "casein_100g": {
+                "type": "float"
+            },
+            "serum": {
+                "type": "string"
+            },
+            "nucleotides_100g": {
+                "type": "float"
+            },
+            "carbohydrates_100g": {
+                "type": "float"
+            },
+            "sugars_100g": {
+                "type": "float"
+            },
+            "sucrose_100g": {
+                "type": "float"
+            },
+            "glucose_100g": {
+                "type": "float"
+            },
+            "fructose_100g": {
+                "type": "float"
+            },
+            "lactose_100g": {
+                "type": "float"
+            },
+            "maltose_100g": {
+                "type": "float"
+            },
+            "maltodextrins_100g": {
+                "type": "float"
+            },
+            "starch_100g": {
+                "type": "float"
+            },
+            "polyols_100g": {
+                "type": "float"
+            },
+            "fat_100g": {
+                "type": "float"
+            },
+            "saturated": {
+                "type": "string"
+            },
+            "butyric": {
+                "type": "string"
+            },
+            "caproic": {
+                "type": "string"
+            },
+            "caprylic": {
+                "type": "string"
+            },
+            "capric": {
+                "type": "string"
+            },
+            "lauric": {
+                "type": "string"
+            },
+            "myristic": {
+                "type": "string"
+            },
+            "palmitic": {
+                "type": "string"
+            },
+            "stearic": {
+                "type": "string"
+            },
+            "arachidic": {
+                "type": "string"
+            },
+            "behenic": {
+                "type": "string"
+            },
+            "lignoceric": {
+                "type": "string"
+            },
+            "cerotic": {
+                "type": "string"
+            },
+            "montanic": {
+                "type": "string"
+            },
+            "melissic": {
+                "type": "string"
+            },
+            "monounsaturated": {
+                "type": "string"
+            },
+            "polyunsaturated": {
+                "type": "string"
+            },
+            "omega": {
+                "type": "string"
+            },
+            "alpha": {
+                "type": "string"
+            },
+            "eicosapentaenoic": {
+                "type": "string"
+            },
+            "docosahexaenoic": {
+                "type": "string"
+            },
+            "linoleic": {
+                "type": "string"
+            },
+            "arachidonic": {
+                "type": "string"
+            },
+            "gamma": {
+                "type": "string"
+            },
+            "dihomo": {
+                "type": "string"
+            },
+            "oleic": {
+                "type": "string"
+            },
+            "elaidic": {
+                "type": "string"
+            },
+            "gondoic": {
+                "type": "string"
+            },
+            "mead": {
+                "type": "string"
+            },
+            "erucic": {
+                "type": "string"
+            },
+            "nervonic": {
+                "type": "string"
+            },
+            "trans": {
+                "type": "string"
+            },
+            "cholesterol_100g": {
+                "type": "float"
+            },
+            "fiber_100g": {
+                "type": "float"
+            },
+            "sodium_100g": {
+                "type": "float"
+            },
+            "alcohol_100g": {
+                "type": "float",
+                "description": "% vol of alcohol"
+            },
+            "vitamin": {
+                "type": "string"
+            },
+            "biotin_100g": {
+                "type": "float",
+                "description": "also known as Vitamine B8"
+            },
+            "pantothenic": {
+                "type": "string"
+            },
+            "silica_100g": {
+                "type": "float"
+            },
+            "bicarbonate_100g": {
+                "type": "float"
+            },
+            "potassium_100g": {
+                "type": "float"
+            },
+            "chloride_100g": {
+                "type": "float"
+            },
+            "calcium_100g": {
+                "type": "float"
+            },
+            "phosphorus_100g": {
+                "type": "float"
+            },
+            "iron_100g": {
+                "type": "float"
+            },
+            "magnesium_100g": {
+                "type": "float"
+            },
+            "zinc_100g": {
+                "type": "float"
+            },
+            "copper_100g": {
+                "type": "float"
+            },
+            "manganese_100g": {
+                "type": "float"
+            },
+            "fluoride_100g": {
+                "type": "float"
+            },
+            "selenium_100g": {
+                "type": "float"
+            },
+            "chromium_100g": {
+                "type": "float"
+            },
+            "molybdenum_100g": {
+                "type": "float"
+            },
+            "iodine_100g": {
+                "type": "float"
+            },
+            "caffeine_100g": {
+                "type": "float"
+            },
+            "taurine_100g": {
+                "type": "float"
+            },
+            "ph_100g": {
+                "type": "float",
+                "description": "pH (no unit)"
+            },
+            "fruits": {
+                "type": "string"
+            },
+            "carbon": {
+                "type": "string"
+            },
+            "nutrition": {
+                "type": "string"
+            }
+        }
+    }
+}
