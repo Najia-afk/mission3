@@ -1,85 +1,53 @@
+import os
 import json
 import pandas as pd
-import re
 
 # Load the config.json
-config_path = 'src/config/config.json'
+script_dir = os.path.dirname(os.path.abspath(__file__))
+config_path = os.path.join(script_dir, '..', 'config', 'data_fields_config.json')
+
 with open(config_path, 'r') as file:
     config = json.load(file)
 
-# Function to get the expected type from the config
-def get_expected_type(column_name, config):
-    # Check for specific fields first
-    for group, group_data in config.items():
-        if 'fields' in group_data and column_name in group_data['fields']:
-            return group_data['fields'][column_name]['type']
+def enrich_metadata_df(metadata_df, config):
+    """
+    Enrich the metadata DataFrame by comparing detected types with config file and adding a column indicating match.
+    """
+    def get_config_type(column_name):
+        # Traverse the config to find the type for the given column
+        for section, section_data in config.items():
+            if "fields" in section_data and column_name in section_data["fields"]:
+                return section_data["fields"][column_name].get("type", "Unknown")
+        return "Unknown"
+
+    # Add a new column to metadata_df to indicate if the type matches with config
+    metadata_df['Config Type'] = metadata_df['Column Name'].apply(get_config_type)
+    metadata_df['Data Fields Match'] = metadata_df.apply(
+        lambda row: "Yes" if row['Type'][:3] == row['Config Type'][:3] else "No", axis=1
+    )
     
-    # Check patterns if no specific field is found
-    for pattern, type_name in config['field_patterns']['patterns'].items():
-        if re.search(pattern, column_name):
-            return type_name
-    
-    return None
+    return metadata_df
 
-# Function to check and enrich the metadata DataFrame
-def enrich_metadata(metadata_df, base_df, config):
-    enriched_data = []
-    error_details = []
+def enrich_metadata_dfs(metadata_dfs, config):
+    """
+    Enrich all metadata DataFrames in a dictionary.
+    """
+    enriched_metadata_dfs = {}
+    for name, df in metadata_dfs.items():
+        enriched_metadata_dfs[name] = enrich_metadata_df(df, config)
+    return enriched_metadata_dfs
 
-    for index, row in metadata_df.iterrows():
-        column_name = row['Column Name']
-        dtype = row['Dtype']
-        
-        # Get the expected type from config
-        expected_type = get_expected_type(column_name, config)
-        
-        # Check if the type matches
-        if expected_type:
-            type_match = dtype == expected_type
-            if not type_match:
-                # Identify rows with mismatched data types
-                for i, value in base_df[column_name].iteritems():
-                    if not isinstance(value, eval(expected_type.title())):
-                        error_details.append({
-                            'DataFrame': row['DataFrame'],
-                            'Column Name': column_name,
-                            'Row Index': i,
-                            'Value': value,
-                            'Expected Type': expected_type,
-                            'Actual Type': type(value).__name__
-                        })
-        else:
-            expected_type = 'Unknown'
-            type_match = False
+# This section runs the script when executed directly
+if __name__ == "__main__":
+    # Load your metadata DataFrame (e.g., combined_metadata)
+    metadata_path = os.path.join(script_dir, '..', 'data', 'combined_metadata.csv')
+    metadata_df = pd.read_csv(metadata_path)
 
-        enriched_data.append({
-            **row,
-            'Expected Type': expected_type,
-            'Type Match': type_match
-        })
+    # Enrich the metadata DataFrame
+    enriched_metadata_df = enrich_metadata_df(metadata_df, config)
 
-    enriched_df = pd.DataFrame(enriched_data)
-    error_df = pd.DataFrame(error_details)
-    
-    return enriched_df, error_df
+    # Save the enriched metadata DataFrame
+    enriched_metadata_path = os.path.join(script_dir, '..', 'data', 'combined_metadata_enriched.csv')
+    enriched_metadata_df.to_csv(enriched_metadata_path, index=False)
 
-# Load the combined_metadata DataFrame
-combined_metadata = pd.read_csv('data/combined_metadata.csv')
-
-# Load the base DataFrame
-base_df_path = 'data/fr.openfoodfacts.org.products.csv'
-base_df = pd.read_csv(base_df_path, delimiter='\t')
-
-# Enrich the metadata
-combined_metadata_enriched, error_df = enrich_metadata(combined_metadata, base_df, config)
-
-# Save the enriched metadata to a new CSV file
-combined_metadata_enriched_path = 'data/combined_metadata_enriched.csv'
-combined_metadata_enriched.to_csv(combined_metadata_enriched_path, index=False)
-
-# Save the error details to a new CSV file
-error_details_path = 'data/data_quality_issues.csv'
-error_df.to_csv(error_details_path, index=False)
-
-print(f"Enriched metadata saved to '{combined_metadata_enriched_path}'")
-print(f"Data quality issues saved to '{error_details_path}'")
+    print(f"Enriched metadata saved to {enriched_metadata_path}")
