@@ -1,12 +1,15 @@
 from scripts.df_generator import get_dataset_directory, check_directory_exists, load_or_cache_dataframes
 from scripts.df_metadata import display_metadata_dfs, create_metadata_dfs
 from scripts.fetch_data_fields import fetch_and_compare_data_fields
-import os
+from scripts.df_metada_enriched import enrich_metadata_df
+import os, json
 import pandas as pd
 
-CACHE_DIR = 'data/cache'  # Directory to store cached DataFrames
+
 
 def main():
+    CACHE_DIR = 'data/cache'  # Directory to store cached DataFrames
+
     # Define the dataset directory
     notebook_directory = os.getcwd()
     dataset_directory = get_dataset_directory(notebook_directory)
@@ -55,6 +58,26 @@ def main():
 
     # Run the fetch and compare data fields script
     fetch_and_compare_data_fields()
+
+    # Load the config.json
+    script_dir = os.path.dirname(os.path.abspath(__file__))
+    config_path = os.path.join(script_dir, 'config', 'data_fields_config.json')
+
+    with open(config_path, 'r') as file:
+        config = json.load(file)
+        
+    # Load your metadata DataFrame (e.g., combined_metadata)
+    metadata_path = os.path.join(script_dir, 'data', 'combined_metadata.csv')
+    metadata_df = pd.read_csv(metadata_path)
+
+    # Enrich the metadata DataFrame
+    enriched_metadata_df = enrich_metadata_df(metadata_df, config)
+
+    # Save the enriched metadata DataFrame
+    enriched_metadata_path = os.path.join(script_dir, 'data', 'combined_metadata_enriched.csv')
+    enriched_metadata_df.to_csv(enriched_metadata_path, index=False)
+
+    print(f"Enriched metadata saved to {enriched_metadata_path}")
 
 if __name__ == "__main__":
     main()

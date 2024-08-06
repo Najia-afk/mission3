@@ -40,7 +40,7 @@ def compare_data(old_data, new_data):
     new_hash = hash_data(new_data)
 
     if old_hash == new_hash:
-        print("No changes detected.")
+        print(f"No changes detected on {LATEST_FILE_PATH}.")
         return False, [], []
 
     old_lines = set(old_data.splitlines())

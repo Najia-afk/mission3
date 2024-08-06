@@ -1,13 +1,3 @@
-import os
-import json
-import pandas as pd
-
-# Load the config.json
-script_dir = os.path.dirname(os.path.abspath(__file__))
-config_path = os.path.join(script_dir, '..', 'config', 'data_fields_config.json')
-
-with open(config_path, 'r') as file:
-    config = json.load(file)
 
 def enrich_metadata_df(metadata_df, config):
     """
@@ -37,17 +27,4 @@ def enrich_metadata_dfs(metadata_dfs, config):
         enriched_metadata_dfs[name] = enrich_metadata_df(df, config)
     return enriched_metadata_dfs
 
-# This section runs the script when executed directly
-if __name__ == "__main__":
-    # Load your metadata DataFrame (e.g., combined_metadata)
-    metadata_path = os.path.join(script_dir, '..', 'data', 'combined_metadata.csv')
-    metadata_df = pd.read_csv(metadata_path)
 
-    # Enrich the metadata DataFrame
-    enriched_metadata_df = enrich_metadata_df(metadata_df, config)
-
-    # Save the enriched metadata DataFrame
-    enriched_metadata_path = os.path.join(script_dir, '..', 'data', 'combined_metadata_enriched.csv')
-    enriched_metadata_df.to_csv(enriched_metadata_path, index=False)
-
-    print(f"Enriched metadata saved to {enriched_metadata_path}")
