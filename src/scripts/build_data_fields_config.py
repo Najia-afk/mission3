@@ -15,7 +15,7 @@ generalities = {
 
 # Function to parse fields from the text
 def parse_fields(description_text):
-    field_pattern = re.compile(r"(?P<field_name>\w+)\s*(?:\:\s*(?P<description>.+))?")
+    field_pattern = re.compile(r"(?P<field_name>\S+)\s*(?:\:\s*(?P<description>.+))?")
     parsed_fields = {}
     start_parsing = False 
 
@@ -31,7 +31,7 @@ def parse_fields(description_text):
 
         if start_parsing:
             if line.startswith('#'):
-                current_section = line.strip('# ').lower().replace(' ', '_')
+                current_section = line.strip('# ').lower().replace(' ','').replace(':','')
                 if current_section not in parsed_fields:
                     parsed_fields[current_section] = {}
             else:

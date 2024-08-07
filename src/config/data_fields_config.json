@@ -1,5 +1,5 @@
 {
-    "general_information:": {
+    "generalinformation:": {
         "description": "",
         "fields": {
             "code": {
@@ -151,7 +151,7 @@
             }
         }
     },
-    "misc._data:": {
+    "misc.data:": {
         "description": "",
         "fields": {
             "serving_size": {
@@ -213,14 +213,17 @@
             }
         }
     },
-    "nutrition_facts:": {
+    "nutritionfacts:": {
         "description": "",
         "fields": {
             "energy_100g": {
                 "type": "float"
             },
-            "energy": {
-                "type": "string"
+            "energy-kj_100g": {
+                "type": "float"
+            },
+            "energy-kcal_100g": {
+                "type": "float"
             },
             "proteins_100g": {
                 "type": "float"
@@ -228,8 +231,8 @@
             "casein_100g": {
                 "type": "float"
             },
-            "serum": {
-                "type": "string"
+            "serum-proteins_100g": {
+                "type": "float"
             },
             "nucleotides_100g": {
                 "type": "float"
@@ -267,101 +270,107 @@
             "fat_100g": {
                 "type": "float"
             },
-            "saturated": {
-                "type": "string"
+            "saturated-fat_100g": {
+                "type": "float"
             },
-            "butyric": {
-                "type": "string"
+            "butyric-acid_100g": {
+                "type": "float"
             },
-            "caproic": {
-                "type": "string"
+            "caproic-acid_100g": {
+                "type": "float"
             },
-            "caprylic": {
-                "type": "string"
+            "caprylic-acid_100g": {
+                "type": "float"
             },
-            "capric": {
-                "type": "string"
+            "capric-acid_100g": {
+                "type": "float"
             },
-            "lauric": {
-                "type": "string"
+            "lauric-acid_100g": {
+                "type": "float"
             },
-            "myristic": {
-                "type": "string"
+            "myristic-acid_100g": {
+                "type": "float"
             },
-            "palmitic": {
-                "type": "string"
+            "palmitic-acid_100g": {
+                "type": "float"
             },
-            "stearic": {
-                "type": "string"
+            "stearic-acid_100g": {
+                "type": "float"
             },
-            "arachidic": {
-                "type": "string"
+            "arachidic-acid_100g": {
+                "type": "float"
             },
-            "behenic": {
-                "type": "string"
+            "behenic-acid_100g": {
+                "type": "float"
             },
-            "lignoceric": {
-                "type": "string"
+            "lignoceric-acid_100g": {
+                "type": "float"
             },
-            "cerotic": {
-                "type": "string"
+            "cerotic-acid_100g": {
+                "type": "float"
             },
-            "montanic": {
-                "type": "string"
+            "montanic-acid_100g": {
+                "type": "float"
             },
-            "melissic": {
-                "type": "string"
+            "melissic-acid_100g": {
+                "type": "float"
             },
-            "monounsaturated": {
-                "type": "string"
+            "monounsaturated-fat_100g": {
+                "type": "float"
             },
-            "polyunsaturated": {
-                "type": "string"
+            "polyunsaturated-fat_100g": {
+                "type": "float"
             },
-            "omega": {
-                "type": "string"
+            "omega-3-fat_100g": {
+                "type": "float"
             },
-            "alpha": {
-                "type": "string"
+            "alpha-linolenic-acid_100g": {
+                "type": "float"
             },
-            "eicosapentaenoic": {
-                "type": "string"
+            "eicosapentaenoic-acid_100g": {
+                "type": "float"
             },
-            "docosahexaenoic": {
-                "type": "string"
+            "docosahexaenoic-acid_100g": {
+                "type": "float"
             },
-            "linoleic": {
-                "type": "string"
+            "omega-6-fat_100g": {
+                "type": "float"
             },
-            "arachidonic": {
-                "type": "string"
+            "linoleic-acid_100g": {
+                "type": "float"
             },
-            "gamma": {
-                "type": "string"
+            "arachidonic-acid_100g": {
+                "type": "float"
             },
-            "dihomo": {
-                "type": "string"
+            "gamma-linolenic-acid_100g": {
+                "type": "float"
             },
-            "oleic": {
-                "type": "string"
+            "dihomo-gamma-linolenic-acid_100g": {
+                "type": "float"
             },
-            "elaidic": {
-                "type": "string"
+            "omega-9-fat_100g": {
+                "type": "float"
             },
-            "gondoic": {
-                "type": "string"
+            "oleic-acid_100g": {
+                "type": "float"
             },
-            "mead": {
-                "type": "string"
+            "elaidic-acid_100g": {
+                "type": "float"
             },
-            "erucic": {
-                "type": "string"
+            "gondoic-acid_100g": {
+                "type": "float"
             },
-            "nervonic": {
-                "type": "string"
+            "mead-acid_100g": {
+                "type": "float"
             },
-            "trans": {
-                "type": "string"
+            "erucic-acid_100g": {
+                "type": "float"
+            },
+            "nervonic-acid_100g": {
+                "type": "float"
+            },
+            "trans-fat_100g": {
+                "type": "float"
             },
             "cholesterol_100g": {
                 "type": "float"
@@ -376,14 +385,43 @@
                 "type": "float",
                 "description": "% vol of alcohol"
             },
-            "vitamin": {
+            "vitamin-a_100g": {
+                "type": "float"
+            },
+            "vitamin-d_100g": {
+                "type": "float"
+            },
+            "vitamin-e_100g": {
+                "type": "float"
+            },
+            "vitamin-k_100g": {
+                "type": "float"
+            },
+            "vitamin-c_100g": {
+                "type": "float"
+            },
+            "vitamin-b1_100g": {
+                "type": "float"
+            },
+            "vitamin-b2_100g": {
+                "type": "float"
+            },
+            "vitamin-pp_100g": {
+                "type": "float"
+            },
+            "vitamin-b6_100g": {
+                "type": "float"
+            },
+            "vitamin-b9_100g": {
+                "type": "float"
+            },
+            "vitamin-b12_100g": {
+                "type": "float"
+            },
+            "biotin_100g:": {
                 "type": "string"
             },
-            "biotin_100g": {
-                "type": "float",
-                "description": "also known as Vitamine B8"
-            },
-            "pantothenic": {
+            "pantothenic-acid_100g:": {
                 "type": "string"
             },
             "silica_100g": {
@@ -444,14 +482,21 @@
                 "type": "float",
                 "description": "pH (no unit)"
             },
-            "fruits": {
-                "type": "string"
+            "fruits-vegetables-nuts_100g": {
+                "type": "float",
+                "description": "% of fruits, vegetables and nuts (excluding potatoes, yams, manioc)"
             },
-            "carbon": {
-                "type": "string"
+            "carbon-footprint_100g": {
+                "type": "float",
+                "description": "carbon footprint (as indicated on the packaging of some products)"
             },
-            "nutrition": {
-                "type": "string"
+            "nutrition-score-fr_100g": {
+                "type": "float",
+                "description": "Nutri-Score - Nutrition score derived from the UK FSA score and adapted for the French market (formula defined by the team of Professor Hercberg)"
+            },
+            "nutrition-score-uk_100g": {
+                "type": "float",
+                "description": "nutrition score defined by the UK Food Standards Administration (FSA)"
             }
         }
     }

@@ -1,6 +1,7 @@
 from scripts.df_generator import get_dataset_directory, check_directory_exists, load_or_cache_dataframes
 from scripts.df_metadata import display_metadata_dfs, create_metadata_dfs
 from scripts.fetch_data_fields import fetch_and_compare_data_fields
+from scripts.build_data_fields_config import build_data_fields_config
 from scripts.df_metada_enriched import enrich_metadata_df
 import os, json
 import pandas as pd
@@ -58,6 +59,9 @@ def main():
 
     # Run the fetch and compare data fields script
     fetch_and_compare_data_fields()
+
+    # Build the config file
+    build_data_fields_config()
 
     # Load the config.json
     script_dir = os.path.dirname(os.path.abspath(__file__))
