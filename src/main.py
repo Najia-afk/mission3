@@ -5,6 +5,7 @@ from scripts.build_data_fields_config import build_data_fields_config
 from scripts.df_filtering import filter_metadata_and_dataframes
 import os, json
 import pandas as pd
+import gc
 
 
 
@@ -90,6 +91,14 @@ def main():
     combined_metadata.to_csv(combined_metadata_path, index=False)
     print(f"combined_metadata {combined_metadata.shape} has been saved or updated.")
 
+
+    # No need all the dfs to be in ram anymore
+    del dfs
+    gc.collect()  # Force garbage collection
+
+    # Cache the filtered_df
+    specific_files = ['filtered_fr.openfoodfacts.org.products.csv'] 
+    dfs = load_or_cache_dataframes(dataset_directory, CACHE_DIR, file_list=specific_files)
 
 if __name__ == "__main__":
     main()
