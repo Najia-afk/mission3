@@ -1,5 +1,5 @@
 {
-    "generalinformation:": {
+    "generalinformation": {
         "description": "",
         "fields": {
             "code": {
@@ -42,7 +42,7 @@
             }
         }
     },
-    "tags:": {
+    "tags": {
         "description": "",
         "fields": {
             "packaging": {
@@ -136,7 +136,7 @@
             }
         }
     },
-    "ingredients:": {
+    "ingredients": {
         "description": "",
         "fields": {
             "ingredients_text": {
@@ -151,7 +151,7 @@
             }
         }
     },
-    "misc.data:": {
+    "misc.data": {
         "description": "",
         "fields": {
             "serving_size": {
@@ -213,7 +213,7 @@
             }
         }
     },
-    "nutritionfacts:": {
+    "nutritionfacts": {
         "description": "",
         "fields": {
             "energy_100g": {
