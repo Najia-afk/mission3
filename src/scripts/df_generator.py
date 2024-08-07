@@ -1,4 +1,5 @@
-import os
+import os, json
+import hashlib
 import pandas as pd
 
 # Set pandas display options
@@ -18,22 +19,24 @@ def list_files_in_directory(directory, file_list=None):
     List all files in the directory.
     If file_list is provided, only return those files.
     """
+    all_files = [f for f in os.listdir(directory) if os.path.isfile(os.path.join(directory, f))]
     if file_list:
-        return [f for f in file_list if os.path.isfile(os.path.join(directory, f))]
-    return [f for f in os.listdir(directory) if os.path.isfile(os.path.join(directory, f))]
+        # Ensure file_list contains full file names with extensions
+        return [f for f in all_files if f in file_list]
+    return all_files
 
 def show_loaded_dfs(dfs, df_names=None):
     """Display the head of loaded DataFrames."""
     print("Currently loaded DataFrames:")
     if df_names is None:
         for name, df in dfs.items():
-            print(f"DataFrame for file '{name}':")
+            print(f"DataFrame for file '{name} {df.shape}':")
             print(df.head())
             print("\n")
     else:
         for name in df_names:
             if name in dfs:
-                print(f"DataFrame for file '{name}':")
+                print(f"DataFrame for file '{name} {df.shape}':")
                 print(dfs[name].head())
                 print("\n")
             else:
@@ -48,6 +51,14 @@ def handle_bad_line(line):
     print(f"Bad line encountered: {line}")
     return None  # Skip the bad line
 
+def generate_file_hash(file_path):
+    """Generate a SHA-256 hash of the file."""
+    sha256 = hashlib.sha256()
+    with open(file_path, 'rb') as f:
+        while chunk := f.read(8192):
+            sha256.update(chunk)
+    return sha256.hexdigest()
+
 def load_and_process_data(directory, file_list=None, separator=','):
     """
     Load and preprocess DataFrames from the specified directory.
@@ -58,14 +69,14 @@ def load_and_process_data(directory, file_list=None, separator=','):
     files = list_files_in_directory(directory, file_list)
     
     for file in files:
-        file_name = os.path.splitext(file)[0]
+        file_name = os.path.splitext(file)[0]  # Keep full file name including extension for caching
         file_path = os.path.join(directory, file)
         try:
             # Read the file with the specified separator and handle bad lines using the python engine
             df = pd.read_csv(file_path, delimiter=separator, on_bad_lines=handle_bad_line, engine='python')
             if df is not None:
                 df = preprocess_df(df)  # Preprocess the DataFrame
-                dfs[file_name] = df
+                dfs[file] = df  # Keep the full file name with extension
         except pd.errors.ParserError as e:
             print(f"ParserError: {e} occurred while processing file '{file}'. Skipping this file.")
         except Exception as e:
@@ -80,27 +91,44 @@ def load_or_cache_dataframes(dataset_directory, cache_directory='data/cache', fi
     The default separator is a comma; this can be overridden by the separator argument.
     """
     dfs = {}
+    hash_file_path = os.path.join(cache_directory, 'file_hashes.json')
     
-    if os.path.exists(cache_directory):
-        # Load DataFrames from cache
-        print("Loading DataFrames from cache...")
-        for file_name in os.listdir(cache_directory):
-            df_name = os.path.splitext(file_name)[0]
-            if not file_list or df_name in file_list:
-                cache_file_path = os.path.join(cache_directory, file_name)
-                dfs[df_name] = pd.read_pickle(cache_file_path)
+    # Load existing hashes
+    if os.path.exists(hash_file_path):
+        with open(hash_file_path, 'r') as f:
+            cached_hashes = json.load(f)
     else:
-        # Load and preprocess DataFrames from the source directory
-        print("Loading DataFrames from source files...")
-        dfs = load_and_process_data(dataset_directory, file_list, separator)
-        
-        # Save the loaded DataFrames to cache for future use
-        os.makedirs(cache_directory, exist_ok=True)
-        for name, df in dfs.items():
-            cache_file_path = os.path.join(cache_directory, f'{name}.pkl')
-            df.to_pickle(cache_file_path)
-    
+        cached_hashes = {}
+
+    files_to_process = list_files_in_directory(dataset_directory, file_list)
+    new_hashes = {}
+
+    for file_name in files_to_process:
+        file_path = os.path.join(dataset_directory, file_name)
+        file_hash = generate_file_hash(file_path)
+        new_hashes[file_name] = file_hash
+
+        # Check if the file has been changed since the last cache
+        if file_name in cached_hashes and cached_hashes[file_name] == file_hash:
+            # Load from cache
+            cache_file_path = os.path.join(cache_directory, f'{file_name}.pkl')
+            if os.path.exists(cache_file_path):
+                dfs[file_name] = pd.read_pickle(cache_file_path)
+                print(f"Loaded '{file_name}' from cache.")
+            else:
+                print(f"Cache file for '{file_name}' not found, processing file.")
+                dfs[file_name] = load_and_process_data(dataset_directory, [file_name], separator)[file_name]
+                dfs[file_name].to_pickle(cache_file_path)
+        else:
+            # Process and cache new or changed files
+            dfs[file_name] = load_and_process_data(dataset_directory, [file_name], separator)[file_name]
+            cache_file_path = os.path.join(cache_directory, f'{file_name}.pkl')
+            dfs[file_name].to_pickle(cache_file_path)
+            print(f"Processed and cached '{file_name}'.")
+
+    # Update the cache hashes
+    os.makedirs(cache_directory, exist_ok=True)
+    with open(hash_file_path, 'w') as f:
+        json.dump(new_hashes, f)
+
     return dfs
-
-
-

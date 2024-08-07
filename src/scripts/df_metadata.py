@@ -1,5 +1,4 @@
 import pandas as pd
-import missingno as msno
 
 # Adjust display options to show all columns
 pd.set_option('display.max_columns', 10)
@@ -66,12 +65,40 @@ def create_metadata_dfs(dfs):
     metadata_dfs = {}
     for df_name, df in dfs.items():
         metadata_df, _ = analyze_dataframe(df)
-        metadata_dfs[f'metadata_{df_name} {df.shape}'] = metadata_df
+        metadata_dfs[f'{df_name}'] = metadata_df
     return metadata_dfs
 
 def display_metadata_dfs(metadata_dfs):
     """Display metadata DataFrames."""
     for name, metadata_df in metadata_dfs.items():
-        print(f"Metadata for {name}:")
+        print(f"Metadata for {name} {metadata_df.shape}:")
         print(metadata_df)
         print("\n")
+
+def enrich_metadata_df(metadata_df, config):
+    """
+    Enrich the metadata DataFrame by comparing detected types with config file and adding a column indicating match.
+    """
+    def get_config_type(column_name):
+        # Traverse the config to find the type for the given column
+        for section, section_data in config.items():
+            if "fields" in section_data and column_name in section_data["fields"]:
+                return section_data["fields"][column_name].get("type", "Unknown")
+        return "Unknown"
+
+    # Add a new column to metadata_df to indicate if the type matches with config
+    metadata_df['Config Type'] = metadata_df['Column Name'].apply(get_config_type)
+    metadata_df['Data Fields Match'] = metadata_df.apply(
+        lambda row: "Yes" if row['Type'][:3] == row['Config Type'][:3] else "No", axis=1
+    )
+    
+    return metadata_df
+
+def enrich_metadata_dfs(metadata_dfs, config):
+    """
+    Enrich all metadata DataFrames in a dictionary.
+    """
+    enriched_metadata_dfs = {}
+    for name, df in metadata_dfs.items():
+        enriched_metadata_dfs[name] = enrich_metadata_df(df, config)
+    return enriched_metadata_dfs
