@@ -1,6 +1,10 @@
 import os, json
 import hashlib
 import pandas as pd
+import missingno as msno
+import matplotlib.pyplot as plt
+
+
 
 # Set pandas display options
 pd.set_option('display.max_columns', 5)
@@ -59,6 +63,20 @@ def generate_file_hash(file_path):
             sha256.update(chunk)
     return sha256.hexdigest()
 
+
+import numpy as np
+
+def save_nullity_matrix(df, file_name, output_dir='graph'):
+    """Save a nullity matrix of the DataFrame as a PNG file."""
+    os.makedirs(output_dir, exist_ok=True)
+    output_path = os.path.join(output_dir, f'{file_name}_nullity_matrix.png')
+    plt.figure(figsize=(15, 9))
+    msno.matrix(df, sparkline=False)
+    plt.title(f'Nullity Matrix for {file_name}')
+    plt.savefig(output_path)
+    plt.close()
+    print(f"Nullity matrix for '{file_name}' has been generated.")
+
 def load_and_process_data(directory, file_list=None, separator=','):
     """
     Load and preprocess DataFrames from the specified directory.
@@ -101,10 +119,12 @@ def load_or_cache_dataframes(dataset_directory, cache_directory='data/cache', fi
         cached_hashes = {}
 
     files_to_process = list_files_in_directory(dataset_directory, file_list)
-    new_hashes = {}
+    new_hashes = cached_hashes.copy()  # Start with the existing hashes
 
-    for file_name in files_to_process:
-        file_path = os.path.join(dataset_directory, file_name)
+    for file_name_with_extension in files_to_process:
+        # Remove the file extension
+        file_name, _ = os.path.splitext(file_name_with_extension)
+        file_path = os.path.join(dataset_directory, file_name_with_extension)
         file_hash = generate_file_hash(file_path)
         new_hashes[file_name] = file_hash
 
@@ -117,14 +137,19 @@ def load_or_cache_dataframes(dataset_directory, cache_directory='data/cache', fi
                 print(f"Loaded '{file_name}' from cache.")
             else:
                 print(f"Cache file for '{file_name}' not found, processing file.")
-                dfs[file_name] = load_and_process_data(dataset_directory, [file_name], separator)[file_name]
+                loaded_dfs = load_and_process_data(dataset_directory, [file_name_with_extension], separator)
+                dfs[file_name] = loaded_dfs[file_name_with_extension]
                 dfs[file_name].to_pickle(cache_file_path)
         else:
             # Process and cache new or changed files
-            dfs[file_name] = load_and_process_data(dataset_directory, [file_name], separator)[file_name]
+            loaded_dfs = load_and_process_data(dataset_directory, [file_name_with_extension], separator)
+            dfs[file_name] = loaded_dfs[file_name_with_extension]
             cache_file_path = os.path.join(cache_directory, f'{file_name}.pkl')
             dfs[file_name].to_pickle(cache_file_path)
             print(f"Processed and cached '{file_name}'.")
+
+        # Save a nullity matrix for the DataFrame
+        save_nullity_matrix(dfs[file_name], file_name)
 
     # Update the cache hashes
     os.makedirs(cache_directory, exist_ok=True)

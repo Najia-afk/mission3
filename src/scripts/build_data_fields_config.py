@@ -107,7 +107,7 @@ def build_data_fields_config(input_file=None, output_file=None):
     with open(output_file, 'w', encoding='utf-8') as file:
         json.dump(config, file, indent=4, ensure_ascii=False)
 
-    print(f"Config file '{output_file}' has been updated and saved.")
+    print(f"Config file '{output_file_name}' has been updated and saved.")
 
 if __name__ == "__main__":
     # Call the function with default values if no arguments are provided

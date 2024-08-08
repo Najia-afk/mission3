@@ -2,12 +2,11 @@ from scripts.df_generator import get_dataset_directory, check_directory_exists, 
 from scripts.df_metadata import display_metadata_dfs, create_metadata_dfs, enrich_metadata_df
 from scripts.fetch_data_fields import fetch_and_compare_data_fields
 from scripts.build_data_fields_config import build_data_fields_config
-from scripts.df_filtering import filter_metadata_and_dataframes
+from scripts.df_filtering import filter_metadata_and_dataframes, process_dataframe
 import os, json
 import pandas as pd
 import gc
-
-
+import numpy as np
 
 def main():
     CACHE_DIR = 'data/cache'  # Directory to store cached DataFrames
@@ -21,8 +20,9 @@ def main():
         print(f"Error: Directory '{dataset_directory}' does not exist.")
         return
 
+    
+
     # Optionally, you can define a list of specific files to process
-    # specific_files = ['file1.csv', 'file2.csv']
     specific_files = ['fr.openfoodfacts.org.products.csv']  # Set to None to process all files
 
     # Load DataFrames from cache or source files
@@ -50,10 +50,8 @@ def main():
     # Optionally, show loaded DataFrames
     display_metadata_dfs(metadata_dfs)
 
-    
-    
+    # Combine metadata into a single DataFrame
     combined_metadata = pd.concat(metadata_dfs.values(), keys=metadata_dfs.keys()).reset_index(level=0).rename(columns={'level_0': 'DataFrame'})
-
 
     # Run the fetch and compare data fields script
     fetch_and_compare_data_fields()
@@ -71,34 +69,42 @@ def main():
     # Enrich the metadata DataFrame
     combined_metadata = enrich_metadata_df(combined_metadata, config)
 
-
-     # Assuming combined_metadata and dfs are defined and populated
+    # Filter metadata and the related DataFrames
     combined_metadata, filtered_dfs = filter_metadata_and_dataframes(combined_metadata, dfs)
 
-    
     # Save the combined metadata DataFrame to a CSV file
     output_dir = os.path.join(notebook_directory, 'data')
     os.makedirs(output_dir, exist_ok=True)
 
-    # save the filtered DataFrames to individual CSVs or as needed
-    for df_name, df in filtered_dfs.items():
-        df_output_path = os.path.join(dataset_directory, f'filtered_{df_name}')
-        df.to_csv(df_output_path, index=False)
-        print(f"Filtered DataFrame '{df_name}' {df.shape} has been saved")
-
-    # Save the metadata DataFrame
     combined_metadata_path = os.path.join(output_dir, 'combined_metadata.csv')
     combined_metadata.to_csv(combined_metadata_path, index=False)
     print(f"combined_metadata {combined_metadata.shape} has been saved or updated.")
 
+    # Save the filtered DataFrames to individual CSVs or as needed
+    for df_name, df in filtered_dfs.items():
+        df_output_path = os.path.join(dataset_directory, f'filtered_{df_name}.csv')
+        df.to_csv(df_output_path, index=False)
+        print(f"Filtered DataFrame 'filtered_{df_name}' {df.shape} has been saved")
 
-    # No need all the dfs to be in ram anymore
+    # No need for all the dfs to be in RAM anymore
     del dfs
     gc.collect()  # Force garbage collection
 
-    # Cache the filtered_df
-    specific_files = ['filtered_fr.openfoodfacts.org.products.csv'] 
+    # Cache the filtered DataFrames
+    specific_files = ['filtered_fr.openfoodfacts.org.products.csv']
     dfs = load_or_cache_dataframes(dataset_directory, CACHE_DIR, file_list=specific_files)
+
+
+    df_name = 'filtered_fr.openfoodfacts.org.products'
+    if df_name in dfs:
+        processed_df = process_dataframe(dfs[df_name])
+        df_output_path = os.path.join(dataset_directory, f'processed_{df_name}.csv')
+        processed_df.to_csv(df_output_path, index=False)
+        print(f"Filtered DataFrame 'processed_{df_name}' {processed_df.shape} has been saved")
+
+
+    else:
+        print(f"DataFrame '{df_name}' not found in the loaded DataFrames.")
 
 if __name__ == "__main__":
     main()
