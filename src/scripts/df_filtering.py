@@ -124,7 +124,10 @@ def process_dataframe(df, log_file='metadata_df.log', output_dir='graph'):
         created_datetime = pd.to_datetime(row['created_datetime'], errors='coerce')
         
         if pd.notna(created_t):
-            created_t = pd.to_datetime(created_t, unit='s', errors='coerce')
+            created_t = pd.to_datetime(created_t, unit='s', errors='coerce').normalize()
+        
+        if pd.notna(created_datetime):
+            created_datetime = created_datetime.normalize()
         
         if pd.isnull(created_datetime) and pd.notnull(created_t):
             df.at[idx, 'created_datetime'] = created_t
@@ -142,7 +145,10 @@ def process_dataframe(df, log_file='metadata_df.log', output_dir='graph'):
         last_modified_datetime = pd.to_datetime(row['last_modified_datetime'], errors='coerce')
 
         if pd.notna(last_modified_t):
-            last_modified_t = pd.to_datetime(last_modified_t, unit='s', errors='coerce')
+            last_modified_t = pd.to_datetime(last_modified_t, unit='s', errors='coerce').normalize()
+
+        if pd.notna(last_modified_datetime):
+            last_modified_datetime = last_modified_datetime.normalize()
 
         if pd.isnull(last_modified_datetime) and pd.notnull(last_modified_t):
             df.at[idx, 'last_modified_datetime'] = last_modified_t
