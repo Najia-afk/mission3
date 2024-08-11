@@ -249,11 +249,11 @@ def process_dataframe(df, log_dir='logs', output_dir='graph'):
     #remove_url_column(df)
 
     # Optimize date columns
-    #check_datetime_consistency(df, 'created_t', 'created_datetime', log_dir='logs')
-    #check_datetime_consistency(df, 'last_modified_t', 'last_modified_datetime', log_dir='logs')
+    check_datetime_consistency(df, 'created_t', 'created_datetime', log_dir='logs')
+    check_datetime_consistency(df, 'last_modified_t', 'last_modified_datetime', log_dir='logs')
     
     # For countries columns
-    #check_field_consistency(df, ['countries', 'countries_tags', 'countries_fr'], log_dir='logs', output_dir='graph', generic_name='countries')
+    check_field_consistency(df, ['countries', 'countries_tags', 'countries_fr'], log_dir='logs', output_dir='graph', generic_name='countries')
     # For ingredients with palm oil
     check_field_consistency(df, ['ingredients_from_palm_oil_n', 'ingredients_that_may_be_from_palm_oil_n'], log_dir='logs', output_dir='graph', generic_name='ingredients_palm_oil')
     # For nutrition columns
