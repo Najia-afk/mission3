@@ -1,7 +1,7 @@
 import matplotlib.pyplot as plt
 import matplotlib.cm as cm
 import numpy as np
-import os, json, logging
+import os, json, logging, csv
 import pandas as pd
 import seaborn as sns
 from collections import defaultdict
@@ -246,14 +246,6 @@ def draw_histogram_for_field_combinations(combination_counts, output_dir, generi
     print(f"{num_outliers} outliers were excluded from the second plot.")
 
 
-def safe_eval(x):
-    try:
-        # Replace 'nan' with a proper NaN representation
-        return eval(x.replace('nan', 'None'))
-    except Exception as e:
-        logging.error(f"Error evaluating string: {x}, error: {e}")
-        return x
-
 def calculate_combination_statistics_from_log(log_file, threshold=85):
     # Load the combination log
     combination_log = pd.read_csv(log_file, index_col=0)
@@ -261,94 +253,56 @@ def calculate_combination_statistics_from_log(log_file, threshold=85):
     # Convert string tuples back to actual tuples, handling 'nan' appropriately
     combination_log.index = combination_log.index.map(safe_eval)
 
-    # Initialize dictionaries to store results
-    combination_dict = defaultdict(dict)
-    grouped_combinations = defaultdict(list)
+    # Calculate total frequency for percentage calculations
+    total_frequency = combination_log['Frequency'].sum()
 
-    # Check if combination_log is empty
-    if combination_log.empty:
-        logging.warning("Combination log is empty. No data to process.")
-        return grouped_combinations, combination_dict
+    # Initialize the dictionary to store hierarchical family results
+    families = defaultdict(lambda: {'percentage': 0, 'subfamilies': defaultdict(dict)})
 
     # Iterate over the combinations and their frequencies
-    for combination, frequency in combination_log.iterrows():
-        combination_key = combination
-        comb_percentage = frequency['Frequency']
+    for combination, row in combination_log.iterrows():
+        frequency = row['Frequency']
+        percentage = (frequency / total_frequency) * 100
+        combination_str = ' '.join(map(str, combination))
 
-        combination_dict[combination_key] = {
-            'combination_percentage': (comb_percentage / combination_log['Frequency'].sum()) * 100
-        }
-
-        # Apply fuzzy matching to group similar combinations
-        combination_str = ' '.join(map(str, combination_key))
-        logging.debug(f"Processing combination: {combination_str}")
-
-        if grouped_combinations:
+        matched_family = None
+        if families:
             match_info = process.extractOne(
-                combination_str, [' '.join(map(str, k)) for k in grouped_combinations.keys()], scorer=fuzz.ratio
+                combination_str, [family for family in families.keys()], scorer=fuzz.ratio
             )
-            if match_info:
-                matched_comb, match_score = match_info[:2]
-                if match_score >= threshold:
-                    grouped_combinations[matched_comb].append(combination_key)
-                else:
-                    grouped_combinations[combination_key].append(combination_key)
-                logging.debug(f"Match found: {matched_comb} with score {match_score}")
-            else:
-                grouped_combinations[combination_key].append(combination_key)
-                logging.debug(f"No valid match found for combination: {combination_str}")
+            if match_info and match_info[1] >= threshold:
+                matched_family = match_info[0]
+
+        if matched_family:
+            # Add to an existing family
+            families[matched_family]['subfamilies'][combination_str] = percentage
         else:
-            grouped_combinations[combination_key].append(combination_key)
+            # Create a new family
+            families[combination_str]['percentage'] = percentage
 
-    logging.info(f"Final combination_dict contains {len(combination_dict)} entries.")
-    return grouped_combinations, combination_dict
+    # Calculate family percentages by summing subfamily percentages
+    for family, data in families.items():
+        data['percentage'] += sum(data['subfamilies'].values())
 
-def save_combination_statistics_as_json(combination_dict, file_path):
-    if not combination_dict:
-        logging.warning("No data to save. The combination_dict is empty.")
-    else:
-        logging.info(f"Saving {len(combination_dict)} entries to JSON.")
+    return families
 
-    # Convert tuple keys to strings
-    serializable_dict = {str(k): v for k, v in combination_dict.items()}
-    
+
+def save_families_to_json(families, file_path):
     with open(file_path, 'w') as json_file:
-        json.dump(serializable_dict, json_file, indent=4)
+        json.dump(families, json_file, indent=4)
 
-def plot_combination_statistics(combination_dict, output_dir='graph'):
-    os.makedirs(output_dir, exist_ok=True)
-    
-    # Extracting data for plotting
-    combination_percentages = [v['combination_percentage'] for v in combination_dict.values()]
-    column_contributions = {col: [] for col in next(iter(combination_dict.values())).keys() if col != 'combination_percentage'}
 
-    for combination in combination_dict.values():
-        for col in column_contributions:
-            column_contributions[col].append(combination.get(col, 0))
+def save_families_to_csv(families, file_path):
+    with open(file_path, 'w', newline='') as csv_file:
+        writer = csv.writer(csv_file)
+        writer.writerow(['Family', 'Subfamily', 'Percentage'])
+        
+        for family, data in families.items():
+            writer.writerow([family, '', f"{data['percentage']:.2f}%"])
+            for subfamily, percentage in data['subfamilies'].items():
+                writer.writerow(['', subfamily, f"{percentage:.2f}%"])
 
-    # Plotting
-    plt.figure(figsize=(12, 8))
-    sns.histplot(combination_percentages, kde=True, bins=20, color='blue', alpha=0.6)
-    plt.title('Combination Percentage Distribution')
-    plt.xlabel('Combination Percentage')
-    plt.ylabel('Frequency')
-    plt.tight_layout()
-    plt.savefig(os.path.join(output_dir, 'combination_percentage_distribution.png'))
-    plt.close()
-
-    # Plotting column contributions
-    for col, values in column_contributions.items():
-        plt.figure(figsize=(12, 8))
-        sns.histplot(values, kde=True, bins=20, color='green', alpha=0.6)
-        plt.title(f'{col} Contribution Percentage Distribution')
-        plt.xlabel(f'{col} Contribution Percentage')
-        plt.ylabel('Frequency')
-        plt.tight_layout()
-        plt.savefig(os.path.join(output_dir, f'{col}_contribution_distribution.png'))
-        plt.close()
-
-# Function to process the dataframe, including generating statistics and plotting
-def process_dataframe(df, log_dir='logs', output_dir='graph'):
+def process_dataframe(df, log_dir='logs', output_dir='graph', output_format='json'):
     os.makedirs(log_dir, exist_ok=True)
     os.makedirs(output_dir, exist_ok=True)
 
@@ -356,14 +310,15 @@ def process_dataframe(df, log_dir='logs', output_dir='graph'):
     log_file = os.path.join(log_dir, 'countries_combination_log.csv')
     
     # Calculate combination statistics from the log
-    grouped_combinations, combination_dict = calculate_combination_statistics_from_log(log_file, threshold=85)
+    families = calculate_combination_statistics_from_log(log_file, threshold=85)
 
-    # Save the statistics to a JSON file
-    save_combination_statistics_as_json(combination_dict, os.path.join(log_dir, 'combination_statistics.json'))
+    # Save the hierarchical structure to the desired format
+    if output_format == 'json':
+        save_families_to_json(families, os.path.join(log_dir, 'families_structure.json'))
+    elif output_format == 'csv':
+        save_families_to_csv(families, os.path.join(log_dir, 'families_structure.csv'))
 
-    # Plot the statistics
-    plot_combination_statistics(combination_dict, output_dir=output_dir)
-    
     # Assuming further processing of the DataFrame is done here
-    # Returning the DataFrame after any necessary updates (if any updates are done in your processing pipeline)
     return df
+
+
