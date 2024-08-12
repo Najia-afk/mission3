@@ -265,6 +265,11 @@ def calculate_combination_statistics_from_log(log_file, threshold=85):
     combination_dict = defaultdict(dict)
     grouped_combinations = defaultdict(list)
 
+    # Check if combination_log is empty
+    if combination_log.empty:
+        logging.warning("Combination log is empty. No data to process.")
+        return grouped_combinations, combination_dict
+
     # Iterate over the combinations and their frequencies
     for combination, frequency in combination_log.iterrows():
         combination_key = combination
@@ -295,10 +300,15 @@ def calculate_combination_statistics_from_log(log_file, threshold=85):
         else:
             grouped_combinations[combination_key].append(combination_key)
 
+    logging.info(f"Final combination_dict contains {len(combination_dict)} entries.")
     return grouped_combinations, combination_dict
 
-
 def save_combination_statistics_as_json(combination_dict, file_path):
+    if not combination_dict:
+        logging.warning("No data to save. The combination_dict is empty.")
+    else:
+        logging.info(f"Saving {len(combination_dict)} entries to JSON.")
+
     # Convert tuple keys to strings
     serializable_dict = {str(k): v for k, v in combination_dict.items()}
     
