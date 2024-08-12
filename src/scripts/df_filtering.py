@@ -1,7 +1,7 @@
 import matplotlib.pyplot as plt
 import matplotlib.cm as cm
 import numpy as np
-import os, json
+import os, json, logging
 import pandas as pd
 import seaborn as sns
 from collections import defaultdict
@@ -246,11 +246,20 @@ def draw_histogram_for_field_combinations(combination_counts, output_dir, generi
     print(f"{num_outliers} outliers were excluded from the second plot.")
 
 
-# Function to calculate statistics for column combinations
+def safe_eval(x):
+    try:
+        # Replace 'nan' with a proper NaN representation
+        return eval(x.replace('nan', 'None'))
+    except Exception as e:
+        logging.error(f"Error evaluating string: {x}, error: {e}")
+        return x
+
 def calculate_combination_statistics_from_log(log_file, threshold=85):
     # Load the combination log
     combination_log = pd.read_csv(log_file, index_col=0)
-    combination_log.index = combination_log.index.map(eval)  # Convert string tuples back to actual tuples
+    
+    # Convert string tuples back to actual tuples, handling 'nan' appropriately
+    combination_log.index = combination_log.index.map(safe_eval)
 
     # Initialize dictionaries to store results
     combination_dict = defaultdict(dict)
