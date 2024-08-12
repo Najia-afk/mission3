@@ -7,6 +7,7 @@ import seaborn as sns
 from collections import defaultdict
 from itertools import combinations
 from fuzzywuzzy import fuzz, process
+import ast
 
 def filter_metadata_and_dataframes(combined_metadata, dfs):
     """
@@ -304,6 +305,14 @@ def save_grouped_results_to_json(grouped_results, file_path):
     with open(file_path, 'w') as json_file:
         json.dump(grouped_results, json_file, indent=4)
 
+def safe_eval(x):
+    try:
+        # Replace 'nan' with a proper NaN representation
+        x = x.replace('nan', 'None')  # Replace string 'nan' with 'None' or 'np.nan'
+        return ast.literal_eval(x)
+    except Exception as e:
+        logging.error(f"Error evaluating string: {x}, error: {e}")
+        return None
 
 # Example usage in the process_dataframe function
 def process_dataframe(df, log_dir='logs', output_dir='graph'):
