@@ -278,8 +278,9 @@ def calculate_combination_statistics(df, columns, max_combination_size, threshol
 
                 # If adding a fuzzy match column, update it
                 if add_fuzzy_column:
+                    combination_str = ' '.join(map(str, combination_key))  # Convert tuple to a single string
                     if df['fuzzy_match_result'].notna().any():  # Ensure there are valid strings to match against
-                        match_info = process.extractOne(' '.join(combination_key), df['fuzzy_match_result'].dropna().tolist(), scorer=fuzz.ratio)
+                        match_info = process.extractOne(combination_str, df['fuzzy_match_result'].dropna().tolist(), scorer=fuzz.ratio)
                         if match_info:  # Check if match_info is not None
                             match, score = match_info[:2]
                             if score >= threshold:
@@ -288,9 +289,10 @@ def calculate_combination_statistics(df, columns, max_combination_size, threshol
     # Group similar combinations using fuzzy matching
     grouped_combinations = defaultdict(list)
     for combination in combination_dict:
+        combination_str = ' '.join(map(str, combination))  # Convert tuple to a single string
         if grouped_combinations:  # Ensure there are existing groups to match against
             match_info = process.extractOne(
-                combination, grouped_combinations.keys(), scorer=fuzz.ratio
+                combination_str, grouped_combinations.keys(), scorer=fuzz.ratio
             )
             if match_info:  # Check if match_info is not None
                 matched_comb, match_score = match_info[:2]
@@ -302,6 +304,7 @@ def calculate_combination_statistics(df, columns, max_combination_size, threshol
             grouped_combinations[combination].append(combination)
 
     return grouped_combinations, combination_dict, df
+
 
 def save_combination_statistics_as_json(combination_dict, file_path):
     with open(file_path, 'w') as json_file:
