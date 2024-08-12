@@ -256,53 +256,57 @@ def calculate_combination_statistics_from_log(log_file, threshold=85):
     # Calculate total frequency for percentage calculations
     total_frequency = combination_log['Frequency'].sum()
 
-    # Initialize the dictionary to store hierarchical family results
-    families = defaultdict(lambda: {'percentage': 0, 'subfamilies': defaultdict(dict)})
+    # Initialize the dictionary to store grouped results
+    grouped_results = defaultdict(lambda: {
+        'total_percentage': 0,
+        'combinations': []
+    })
 
     # Iterate over the combinations and their frequencies
     for combination, row in combination_log.iterrows():
         frequency = row['Frequency']
         percentage = (frequency / total_frequency) * 100
         combination_str = ' '.join(map(str, combination))
+        key = combination[1]  # Use the second item in the tuple as the primary key
 
-        matched_family = None
-        if families:
+        # Match with existing groups using fuzzy matching
+        matched_combination = None
+        fuzzy_score = None
+        if grouped_results[key]['combinations']:
             match_info = process.extractOne(
-                combination_str, [family for family in families.keys()], scorer=fuzz.ratio
+                combination_str, [combo['combination'] for combo in grouped_results[key]['combinations']], scorer=fuzz.ratio
             )
             if match_info and match_info[1] >= threshold:
-                matched_family = match_info[0]
+                matched_combination = match_info[0]
+                fuzzy_score = match_info[1]
 
-        if matched_family:
-            # Add to an existing family
-            families[matched_family]['subfamilies'][combination_str] = percentage
+        if matched_combination:
+            # Add to an existing combination group
+            grouped_results[key]['combinations'].append({
+                'combination': combination_str,
+                'combination_percentage': percentage,
+                'fuzzy_score': fuzzy_score
+            })
         else:
-            # Create a new family
-            families[combination_str]['percentage'] = percentage
+            # Create a new group under the key
+            grouped_results[key]['combinations'].append({
+                'combination': combination_str,
+                'combination_percentage': percentage,
+                'fuzzy_score': 1 if not fuzzy_score else fuzzy_score
+            })
 
-    # Calculate family percentages by summing subfamily percentages
-    for family, data in families.items():
-        data['percentage'] += sum(data['subfamilies'].values())
+        # Update the total percentage for the key
+        grouped_results[key]['total_percentage'] += percentage
 
-    return families
+    return grouped_results
 
-
-def save_families_to_json(families, file_path):
+def save_grouped_results_to_json(grouped_results, file_path):
     with open(file_path, 'w') as json_file:
-        json.dump(families, json_file, indent=4)
+        json.dump(grouped_results, json_file, indent=4)
 
 
-def save_families_to_csv(families, file_path):
-    with open(file_path, 'w', newline='') as csv_file:
-        writer = csv.writer(csv_file)
-        writer.writerow(['Family', 'Subfamily', 'Percentage'])
-        
-        for family, data in families.items():
-            writer.writerow([family, '', f"{data['percentage']:.2f}%"])
-            for subfamily, percentage in data['subfamilies'].items():
-                writer.writerow(['', subfamily, f"{percentage:.2f}%"])
-
-def process_dataframe(df, log_dir='logs', output_dir='graph', output_format='json'):
+# Example usage in the process_dataframe function
+def process_dataframe(df, log_dir='logs', output_dir='graph'):
     os.makedirs(log_dir, exist_ok=True)
     os.makedirs(output_dir, exist_ok=True)
 
@@ -310,15 +314,18 @@ def process_dataframe(df, log_dir='logs', output_dir='graph', output_format='jso
     log_file = os.path.join(log_dir, 'countries_combination_log.csv')
     
     # Calculate combination statistics from the log
-    families = calculate_combination_statistics_from_log(log_file, threshold=85)
+    grouped_results = calculate_combination_statistics_from_log(log_file, threshold=85)
 
     # Save the hierarchical structure to the desired format
-    if output_format == 'json':
-        save_families_to_json(families, os.path.join(log_dir, 'families_structure.json'))
-    elif output_format == 'csv':
-        save_families_to_csv(families, os.path.join(log_dir, 'families_structure.csv'))
+    save_grouped_results_to_json(grouped_results, os.path.join(log_dir, 'grouped_results.json'))
+
 
     # Assuming further processing of the DataFrame is done here
     return df
+
+
+
+
+
 
 
