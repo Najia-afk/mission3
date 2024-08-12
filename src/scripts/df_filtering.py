@@ -247,7 +247,21 @@ def draw_histogram_for_field_combinations(combination_counts, output_dir, generi
     print(f"{num_outliers} outliers were excluded from the second plot.")
 
 
-def calculate_combination_statistics_from_log(log_file, threshold=85):
+from fuzzywuzzy import fuzz, process
+import json
+import ast
+import logging
+
+def safe_eval(x):
+    try:
+        # Replace 'nan' with a proper NaN representation
+        x = x.replace('nan', 'None')  # Replace string 'nan' with 'None'
+        return ast.literal_eval(x)
+    except Exception as e:
+        logging.error(f"Error evaluating string: {x}, error: {e}")
+        return None
+
+def group_combinations_with_fuzzy(log_file, threshold=85):
     # Load the combination log
     combination_log = pd.read_csv(log_file, index_col=0)
     
@@ -257,62 +271,50 @@ def calculate_combination_statistics_from_log(log_file, threshold=85):
     # Calculate total frequency for percentage calculations
     total_frequency = combination_log['Frequency'].sum()
 
-    # Initialize the dictionary to store grouped results
-    grouped_results = defaultdict(lambda: {
-        'total_percentage': 0,
-        'combinations': []
-    })
+    # Initialize the dictionary to store results
+    grouped_results = {}
 
     # Iterate over the combinations and their frequencies
     for combination, row in combination_log.iterrows():
         frequency = row['Frequency']
         percentage = (frequency / total_frequency) * 100
-        combination_str = ' '.join(map(str, combination))
-        key = combination[1]  # Use the second item in the tuple as the primary key
+        combination_key = tuple(combination)
+        key_for_fuzzy = f"{combination_key[1]} {combination_key[2]}"  # Only second and third items
 
-        # Match with existing groups using fuzzy matching
-        matched_combination = None
-        fuzzy_score = None
-        if grouped_results[key]['combinations']:
-            match_info = process.extractOne(
-                combination_str, [combo['combination'] for combo in grouped_results[key]['combinations']], scorer=fuzz.ratio
-            )
+        # Perform fuzzy matching based on the second and third items
+        matched_group = None
+        if grouped_results:
+            match_info = process.extractOne(key_for_fuzzy, grouped_results.keys(), scorer=fuzz.ratio)
             if match_info and match_info[1] >= threshold:
-                matched_combination = match_info[0]
-                fuzzy_score = match_info[1]
+                matched_group = match_info[0]
 
-        if matched_combination:
-            # Add to an existing combination group
-            grouped_results[key]['combinations'].append({
-                'combination': combination_str,
-                'combination_percentage': percentage,
-                'fuzzy_score': fuzzy_score
+        if matched_group:
+            # Add to an existing group
+            grouped_results[matched_group]["combinations"].append({
+                "combination": combination_key,
+                "combination_percentage": percentage,
+                "fuzzy_score": fuzz.ratio(" ".join(map(str, combination_key)), matched_group)
             })
         else:
-            # Create a new group under the key
-            grouped_results[key]['combinations'].append({
-                'combination': combination_str,
-                'combination_percentage': percentage,
-                'fuzzy_score': 1 if not fuzzy_score else fuzzy_score
-            })
-
-        # Update the total percentage for the key
-        grouped_results[key]['total_percentage'] += percentage
+            # Create a new group
+            grouped_results[key_for_fuzzy] = {
+                "combinations": [{
+                    "combination": combination_key,
+                    "combination_percentage": percentage,
+                    "fuzzy_score": 100  # 100 for the exact match (since it's the first entry in this group)
+                }],
+                "total_percentage": percentage
+            }
+    
+    # Summing up the total percentage for each group
+    for group in grouped_results.values():
+        group["total_percentage"] = sum([item["combination_percentage"] for item in group["combinations"]])
 
     return grouped_results
 
 def save_grouped_results_to_json(grouped_results, file_path):
     with open(file_path, 'w') as json_file:
-        json.dump(grouped_results, json_file, indent=4)
-
-def safe_eval(x):
-    try:
-        # Replace 'nan' with a proper NaN representation
-        x = x.replace('nan', 'None')  # Replace string 'nan' with 'None' or 'np.nan'
-        return ast.literal_eval(x)
-    except Exception as e:
-        logging.error(f"Error evaluating string: {x}, error: {e}")
-        return None
+        json.dump(grouped_results, json_file, indent=4, default=str)
 
 # Example usage in the process_dataframe function
 def process_dataframe(df, log_dir='logs', output_dir='graph'):
@@ -322,19 +324,11 @@ def process_dataframe(df, log_dir='logs', output_dir='graph'):
     # Assuming that the log file name is based on the 'countries' field consistency check
     log_file = os.path.join(log_dir, 'countries_combination_log.csv')
     
-    # Calculate combination statistics from the log
-    grouped_results = calculate_combination_statistics_from_log(log_file, threshold=85)
+    # Group combinations and calculate statistics from the log
+    grouped_results = group_combinations_with_fuzzy(log_file, threshold=85)
 
-    # Save the hierarchical structure to the desired format
+    # Save the grouped structure to a JSON file
     save_grouped_results_to_json(grouped_results, os.path.join(log_dir, 'grouped_results.json'))
-
 
     # Assuming further processing of the DataFrame is done here
     return df
-
-
-
-
-
-
-
