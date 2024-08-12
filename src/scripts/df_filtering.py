@@ -247,71 +247,46 @@ def draw_histogram_for_field_combinations(combination_counts, output_dir, generi
 
 
 # Function to calculate statistics for column combinations
-def calculate_combination_statistics(df, columns, max_combination_size, threshold=85, add_fuzzy_column=True):
-    total_rows = len(df)
+def calculate_combination_statistics_from_log(log_file, threshold=85):
+    # Load the combination log
+    combination_log = pd.read_csv(log_file, index_col=0)
+    combination_log.index = combination_log.index.map(eval)  # Convert string tuples back to actual tuples
+
+    # Initialize dictionaries to store results
     combination_dict = defaultdict(dict)
-    
-    # Create a temporary DataFrame with only the necessary columns and a row index
-    temp_df = df[columns].copy()
-    temp_df['row_index'] = df.index
-    
-    # Standardize text (lowercasing, stripping, etc.)
-    temp_df = temp_df.map(lambda x: x.lower().strip() if isinstance(x, str) else x)
-
-    # Initialize a column to store fuzzy match results if requested
-    if add_fuzzy_column:
-        temp_df['fuzzy_match_result'] = ''
-
-    # Iterate over combination sizes from 2 to max_combination_size
-    for comb_size in range(2, max_combination_size + 1):
-        for comb in combinations(columns, comb_size):
-            # Count occurrences of each combination
-            comb_counts = temp_df.groupby(list(comb)).size().reset_index(name='count')
-            comb_counts['percentage'] = (comb_counts['count'] / total_rows) * 100
-
-            # Calculate the percentage contribution of each column in the combination when not null
-            for index, row in comb_counts.iterrows():
-                combination_key = tuple(row[list(comb)])
-                comb_percentage = row['percentage']
-                
-                column_stats = {col: (temp_df[col].notna().mean() * 100) for col in comb}
-                combination_dict[combination_key] = {
-                    'combination_percentage': comb_percentage,
-                    **column_stats
-                }
-
-                # If adding a fuzzy match column, update it
-                if add_fuzzy_column:
-                    combination_str = ' '.join(map(str, combination_key))  # Convert tuple to a single string
-                    if temp_df['fuzzy_match_result'].notna().any():  # Ensure there are valid strings to match against
-                        match_info = process.extractOne(combination_str, temp_df['fuzzy_match_result'].dropna().tolist(), scorer=fuzz.ratio)
-                        if match_info:  # Check if match_info is not None
-                            match, score = match_info[:2]
-                            if score >= threshold:
-                                matched_indices = temp_df[temp_df[list(comb)].apply(tuple, axis=1) == combination_key]['row_index']
-                                df.loc[matched_indices, 'fuzzy_match_result'] = match
-
-    # Group similar combinations using fuzzy matching
     grouped_combinations = defaultdict(list)
-    for combination in combination_dict:
-        combination_str = ' '.join(map(str, combination))  # Convert tuple to a single string
-        if grouped_combinations:  # Ensure there are existing groups to match against
+
+    # Iterate over the combinations and their frequencies
+    for combination, frequency in combination_log.iterrows():
+        combination_key = combination
+        comb_percentage = frequency['Frequency']
+
+        combination_dict[combination_key] = {
+            'combination_percentage': (comb_percentage / combination_log['Frequency'].sum()) * 100
+        }
+
+        # Apply fuzzy matching to group similar combinations
+        combination_str = ' '.join(map(str, combination_key))
+        logging.debug(f"Processing combination: {combination_str}")
+
+        if grouped_combinations:
             match_info = process.extractOne(
                 combination_str, [' '.join(map(str, k)) for k in grouped_combinations.keys()], scorer=fuzz.ratio
             )
-            if match_info:  # Check if match_info is not None
+            if match_info:
                 matched_comb, match_score = match_info[:2]
                 if match_score >= threshold:
-                    grouped_combinations[matched_comb].append(combination)
+                    grouped_combinations[matched_comb].append(combination_key)
                 else:
-                    grouped_combinations[combination].append(combination)
+                    grouped_combinations[combination_key].append(combination_key)
+                logging.debug(f"Match found: {matched_comb} with score {match_score}")
+            else:
+                grouped_combinations[combination_key].append(combination_key)
+                logging.debug(f"No valid match found for combination: {combination_str}")
         else:
-            grouped_combinations[combination].append(combination)
+            grouped_combinations[combination_key].append(combination_key)
 
-    # Delete the temporary DataFrame to free up memory
-    del temp_df
-
-    return grouped_combinations, combination_dict, df
+    return grouped_combinations, combination_dict
 
 
 def save_combination_statistics_as_json(combination_dict, file_path):
@@ -358,23 +333,18 @@ def process_dataframe(df, log_dir='logs', output_dir='graph'):
     os.makedirs(log_dir, exist_ok=True)
     os.makedirs(output_dir, exist_ok=True)
 
-    # Example of other data cleaning steps (commented out as placeholders)
-    # remove_url_column(df)
-    # check_datetime_consistency(df, 'created_t', 'created_datetime', log_dir=log_dir)
-    # check_field_consistency(df, ['countries', 'countries_tags', 'countries_fr'], log_dir=log_dir, output_dir=output_dir, generic_name='countries')
-
-    # Specify the columns of interest for combination statistics
-    columns_of_interest = ['countries', 'countries_tags', 'countries_fr']
-
-    # Calculate combination statistics and update the DataFrame
-    grouped_combinations, combination_statistics, updated_df = calculate_combination_statistics(
-        df, columns_of_interest, max_combination_size=3, threshold=85, add_fuzzy_column=True
-    )
+    # Assuming that the log file name is based on the 'countries' field consistency check
+    log_file = os.path.join(log_dir, 'countries_combination_log.csv')
+    
+    # Calculate combination statistics from the log
+    grouped_combinations, combination_dict = calculate_combination_statistics_from_log(log_file, threshold=85)
 
     # Save the statistics to a JSON file
-    save_combination_statistics_as_json(combination_statistics, os.path.join(log_dir, 'combination_statistics.json'))
+    save_combination_statistics_as_json(combination_dict, os.path.join(log_dir, 'combination_statistics.json'))
 
     # Plot the statistics
-    plot_combination_statistics(combination_statistics, output_dir=output_dir)
+    plot_combination_statistics(combination_dict, output_dir=output_dir)
     
-    return updated_df
+    # Assuming further processing of the DataFrame is done here
+    # Returning the DataFrame after any necessary updates (if any updates are done in your processing pipeline)
+    return df
