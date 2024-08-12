@@ -292,7 +292,7 @@ def calculate_combination_statistics(df, columns, max_combination_size, threshol
         combination_str = ' '.join(map(str, combination))  # Convert tuple to a single string
         if grouped_combinations:  # Ensure there are existing groups to match against
             match_info = process.extractOne(
-                combination_str, grouped_combinations.keys(), scorer=fuzz.ratio
+                combination_str, [' '.join(map(str, k)) for k in grouped_combinations.keys()], scorer=fuzz.ratio
             )
             if match_info:  # Check if match_info is not None
                 matched_comb, match_score = match_info[:2]
@@ -304,6 +304,7 @@ def calculate_combination_statistics(df, columns, max_combination_size, threshol
             grouped_combinations[combination].append(combination)
 
     return grouped_combinations, combination_dict, df
+
 
 
 def save_combination_statistics_as_json(combination_dict, file_path):
