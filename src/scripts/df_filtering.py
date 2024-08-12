@@ -1,9 +1,12 @@
 import matplotlib.pyplot as plt
 import matplotlib.cm as cm
 import numpy as np
-import os
+import os, json
 import pandas as pd
 import seaborn as sns
+from collections import defaultdict
+from itertools import combinations
+from fuzzywuzzy import fuzz, process
 
 def filter_metadata_and_dataframes(combined_metadata, dfs):
     """
@@ -242,26 +245,115 @@ def draw_histogram_for_field_combinations(combination_counts, output_dir, generi
 
     print(f"{num_outliers} outliers were excluded from the second plot.")
 
+
+# Function to calculate statistics for column combinations
+# Function to calculate statistics for column combinations
+def calculate_combination_statistics(df, columns, max_combination_size, threshold=85, add_fuzzy_column=True):
+    total_rows = len(df)
+    combination_dict = defaultdict(dict)
+    
+    # Standardize text (lowercasing, stripping, etc.)
+    df = df.map(lambda x: x.lower().strip() if isinstance(x, str) else x)
+
+    # Initialize a column to store fuzzy match results if requested
+    if add_fuzzy_column:
+        df['fuzzy_match_result'] = ''
+
+    # Iterate over combination sizes from 2 to max_combination_size
+    for comb_size in range(2, max_combination_size + 1):
+        for comb in combinations(columns, comb_size):
+            # Count occurrences of each combination
+            comb_counts = df.groupby(list(comb)).size().reset_index(name='count')
+            comb_counts['percentage'] = (comb_counts['count'] / total_rows) * 100
+
+            # Calculate the percentage contribution of each column in the combination when not null
+            for index, row in comb_counts.iterrows():
+                combination_key = tuple(row[list(comb)])
+                comb_percentage = row['percentage']
+                
+                column_stats = {col: (df[col].notna().mean() * 100) for col in comb}
+                combination_dict[combination_key] = {
+                    'combination_percentage': comb_percentage,
+                    **column_stats
+                }
+
+                # If adding a fuzzy match column, update it
+                if add_fuzzy_column:
+                    match, score = process.extractOne(' '.join(combination_key), df['fuzzy_match_result'].tolist(), scorer=fuzz.ratio)[:2]
+                    if score >= threshold:
+                        df.at[index, 'fuzzy_match_result'] = match
+
+    # Group similar combinations using fuzzy matching
+    grouped_combinations = defaultdict(list)
+    for combination in combination_dict:
+        matched_comb, match_score = process.extractOne(
+            combination, grouped_combinations.keys(), scorer=fuzz.ratio
+        )[:2]
+        if match_score >= threshold:
+            grouped_combinations[matched_comb].append(combination)
+        else:
+            grouped_combinations[combination].append(combination)
+
+    return grouped_combinations, combination_dict, df
+
+def save_combination_statistics_as_json(combination_dict, file_path):
+    with open(file_path, 'w') as json_file:
+        json.dump(combination_dict, json_file, indent=4)
+
+def plot_combination_statistics(combination_dict, output_dir='graph'):
+    os.makedirs(output_dir, exist_ok=True)
+    
+    # Extracting data for plotting
+    combination_percentages = [v['combination_percentage'] for v in combination_dict.values()]
+    column_contributions = {col: [] for col in next(iter(combination_dict.values())).keys() if col != 'combination_percentage'}
+
+    for combination in combination_dict.values():
+        for col in column_contributions:
+            column_contributions[col].append(combination.get(col, 0))
+
+    # Plotting
+    plt.figure(figsize=(12, 8))
+    sns.histplot(combination_percentages, kde=True, bins=20, color='blue', alpha=0.6)
+    plt.title('Combination Percentage Distribution')
+    plt.xlabel('Combination Percentage')
+    plt.ylabel('Frequency')
+    plt.tight_layout()
+    plt.savefig(os.path.join(output_dir, 'combination_percentage_distribution.png'))
+    plt.close()
+
+    # Plotting column contributions
+    for col, values in column_contributions.items():
+        plt.figure(figsize=(12, 8))
+        sns.histplot(values, kde=True, bins=20, color='green', alpha=0.6)
+        plt.title(f'{col} Contribution Percentage Distribution')
+        plt.xlabel(f'{col} Contribution Percentage')
+        plt.ylabel('Frequency')
+        plt.tight_layout()
+        plt.savefig(os.path.join(output_dir, f'{col}_contribution_distribution.png'))
+        plt.close()
+
+# Function to process the dataframe, including generating statistics and plotting
 def process_dataframe(df, log_dir='logs', output_dir='graph'):
     os.makedirs(log_dir, exist_ok=True)
     os.makedirs(output_dir, exist_ok=True)
 
-    #remove_url_column(df)
+    # Example of other data cleaning steps (commented out as placeholders)
+    # remove_url_column(df)
+    # check_datetime_consistency(df, 'created_t', 'created_datetime', log_dir=log_dir)
+    # check_field_consistency(df, ['countries', 'countries_tags', 'countries_fr'], log_dir=log_dir, output_dir=output_dir, generic_name='countries')
 
-    # Optimize date columns
-    check_datetime_consistency(df, 'created_t', 'created_datetime', log_dir='logs')
-    check_datetime_consistency(df, 'last_modified_t', 'last_modified_datetime', log_dir='logs')
+    # Specify the columns of interest for combination statistics
+    columns_of_interest = ['countries', 'countries_tags', 'countries_fr']
+
+    # Calculate combination statistics and update the DataFrame
+    grouped_combinations, combination_statistics, updated_df = calculate_combination_statistics(
+        df, columns_of_interest, max_combination_size=3, threshold=85, add_fuzzy_column=True
+    )
+
+    # Save the statistics to a JSON file
+    save_combination_statistics_as_json(combination_statistics, os.path.join(log_dir, 'combination_statistics.json'))
+
+    # Plot the statistics
+    plot_combination_statistics(combination_statistics, output_dir=output_dir)
     
-    # For countries columns
-    check_field_consistency(df, ['countries', 'countries_tags', 'countries_fr'], log_dir='logs', output_dir='graph', generic_name='countries')
-    # For ingredients with palm oil
-    check_field_consistency(df, ['ingredients_from_palm_oil_n', 'ingredients_that_may_be_from_palm_oil_n'], log_dir='logs', output_dir='graph', generic_name='ingredients_palm_oil')
-    # For nutrition columns
-    check_field_consistency(df, ['nutrition_grade_fr', 'nutrition-score-fr_100g', 'nutrition-score-uk_100g'], log_dir='logs', output_dir='graph', generic_name='nutrition')
-    check_field_consistency(df, ['brands_tags', 'brands'], log_dir='logs', output_dir='graph', generic_name='brands')
-    check_field_consistency(df, ['additives_n', 'additives'], log_dir='logs', output_dir='graph', generic_name='additives')
-    check_field_consistency(df, ['states', 'states_tags','states_fr'], log_dir='logs', output_dir='graph', generic_name='states')
-    
-
-    return df
-
+    return updated_df
