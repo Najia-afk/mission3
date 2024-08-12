@@ -251,18 +251,22 @@ def calculate_combination_statistics(df, columns, max_combination_size, threshol
     total_rows = len(df)
     combination_dict = defaultdict(dict)
     
+    # Create a temporary DataFrame with only the necessary columns and a row index
+    temp_df = df[columns].copy()
+    temp_df['row_index'] = df.index
+    
     # Standardize text (lowercasing, stripping, etc.)
-    df = df.map(lambda x: x.lower().strip() if isinstance(x, str) else x)
+    temp_df = temp_df.map(lambda x: x.lower().strip() if isinstance(x, str) else x)
 
     # Initialize a column to store fuzzy match results if requested
     if add_fuzzy_column:
-        df['fuzzy_match_result'] = ''
+        temp_df['fuzzy_match_result'] = ''
 
     # Iterate over combination sizes from 2 to max_combination_size
     for comb_size in range(2, max_combination_size + 1):
         for comb in combinations(columns, comb_size):
             # Count occurrences of each combination
-            comb_counts = df.groupby(list(comb)).size().reset_index(name='count')
+            comb_counts = temp_df.groupby(list(comb)).size().reset_index(name='count')
             comb_counts['percentage'] = (comb_counts['count'] / total_rows) * 100
 
             # Calculate the percentage contribution of each column in the combination when not null
@@ -270,7 +274,7 @@ def calculate_combination_statistics(df, columns, max_combination_size, threshol
                 combination_key = tuple(row[list(comb)])
                 comb_percentage = row['percentage']
                 
-                column_stats = {col: (df[col].notna().mean() * 100) for col in comb}
+                column_stats = {col: (temp_df[col].notna().mean() * 100) for col in comb}
                 combination_dict[combination_key] = {
                     'combination_percentage': comb_percentage,
                     **column_stats
@@ -279,12 +283,13 @@ def calculate_combination_statistics(df, columns, max_combination_size, threshol
                 # If adding a fuzzy match column, update it
                 if add_fuzzy_column:
                     combination_str = ' '.join(map(str, combination_key))  # Convert tuple to a single string
-                    if df['fuzzy_match_result'].notna().any():  # Ensure there are valid strings to match against
-                        match_info = process.extractOne(combination_str, df['fuzzy_match_result'].dropna().tolist(), scorer=fuzz.ratio)
+                    if temp_df['fuzzy_match_result'].notna().any():  # Ensure there are valid strings to match against
+                        match_info = process.extractOne(combination_str, temp_df['fuzzy_match_result'].dropna().tolist(), scorer=fuzz.ratio)
                         if match_info:  # Check if match_info is not None
                             match, score = match_info[:2]
                             if score >= threshold:
-                                df.at[index, 'fuzzy_match_result'] = match
+                                matched_indices = temp_df[temp_df[list(comb)].apply(tuple, axis=1) == combination_key]['row_index']
+                                df.loc[matched_indices, 'fuzzy_match_result'] = match
 
     # Group similar combinations using fuzzy matching
     grouped_combinations = defaultdict(list)
@@ -303,13 +308,18 @@ def calculate_combination_statistics(df, columns, max_combination_size, threshol
         else:
             grouped_combinations[combination].append(combination)
 
+    # Delete the temporary DataFrame to free up memory
+    del temp_df
+
     return grouped_combinations, combination_dict, df
 
 
-
 def save_combination_statistics_as_json(combination_dict, file_path):
+    # Convert tuple keys to strings
+    serializable_dict = {str(k): v for k, v in combination_dict.items()}
+    
     with open(file_path, 'w') as json_file:
-        json.dump(combination_dict, json_file, indent=4)
+        json.dump(serializable_dict, json_file, indent=4)
 
 def plot_combination_statistics(combination_dict, output_dir='graph'):
     os.makedirs(output_dir, exist_ok=True)
