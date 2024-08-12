@@ -247,7 +247,6 @@ def draw_histogram_for_field_combinations(combination_counts, output_dir, generi
 
 
 # Function to calculate statistics for column combinations
-# Function to calculate statistics for column combinations
 def calculate_combination_statistics(df, columns, max_combination_size, threshold=85, add_fuzzy_column=True):
     total_rows = len(df)
     combination_dict = defaultdict(dict)
@@ -279,18 +278,26 @@ def calculate_combination_statistics(df, columns, max_combination_size, threshol
 
                 # If adding a fuzzy match column, update it
                 if add_fuzzy_column:
-                    match, score = process.extractOne(' '.join(combination_key), df['fuzzy_match_result'].tolist(), scorer=fuzz.ratio)[:2]
-                    if score >= threshold:
-                        df.at[index, 'fuzzy_match_result'] = match
+                    if df['fuzzy_match_result'].notna().any():  # Ensure there are valid strings to match against
+                        match_info = process.extractOne(' '.join(combination_key), df['fuzzy_match_result'].dropna().tolist(), scorer=fuzz.ratio)
+                        if match_info:  # Check if match_info is not None
+                            match, score = match_info[:2]
+                            if score >= threshold:
+                                df.at[index, 'fuzzy_match_result'] = match
 
     # Group similar combinations using fuzzy matching
     grouped_combinations = defaultdict(list)
     for combination in combination_dict:
-        matched_comb, match_score = process.extractOne(
-            combination, grouped_combinations.keys(), scorer=fuzz.ratio
-        )[:2]
-        if match_score >= threshold:
-            grouped_combinations[matched_comb].append(combination)
+        if grouped_combinations:  # Ensure there are existing groups to match against
+            match_info = process.extractOne(
+                combination, grouped_combinations.keys(), scorer=fuzz.ratio
+            )
+            if match_info:  # Check if match_info is not None
+                matched_comb, match_score = match_info[:2]
+                if match_score >= threshold:
+                    grouped_combinations[matched_comb].append(combination)
+                else:
+                    grouped_combinations[combination].append(combination)
         else:
             grouped_combinations[combination].append(combination)
 
