@@ -247,10 +247,6 @@ def draw_histogram_for_field_combinations(combination_counts, output_dir, generi
     print(f"{num_outliers} outliers were excluded from the second plot.")
 
 
-from fuzzywuzzy import fuzz, process
-import json
-import ast
-import logging
 
 def safe_eval(x):
     try:
@@ -261,27 +257,20 @@ def safe_eval(x):
         logging.error(f"Error evaluating string: {x}, error: {e}")
         return None
 
+# Function to group combinations using fuzzy matching
 def group_combinations_with_fuzzy(log_file, threshold=85):
-    # Load the combination log
     combination_log = pd.read_csv(log_file, index_col=0)
-    
-    # Convert string tuples back to actual tuples, handling 'nan' appropriately
     combination_log.index = combination_log.index.map(safe_eval)
 
-    # Calculate total frequency for percentage calculations
     total_frequency = combination_log['Frequency'].sum()
-
-    # Initialize the dictionary to store results
     grouped_results = {}
 
-    # Iterate over the combinations and their frequencies
     for combination, row in combination_log.iterrows():
         frequency = row['Frequency']
         percentage = (frequency / total_frequency) * 100
         combination_key = tuple(combination)
-        key_for_fuzzy = f"{combination_key[1]} {combination_key[2]}"  # Only second and third items
+        key_for_fuzzy = f"{combination_key[1]} {combination_key[2]}"
 
-        # Perform fuzzy matching based on the second and third items
         matched_group = None
         if grouped_results:
             match_info = process.extractOne(key_for_fuzzy, grouped_results.keys(), scorer=fuzz.ratio)
@@ -289,26 +278,27 @@ def group_combinations_with_fuzzy(log_file, threshold=85):
                 matched_group = match_info[0]
 
         if matched_group:
-            # Add to an existing group
             grouped_results[matched_group]["combinations"].append({
                 "combination": combination_key,
                 "combination_percentage": percentage,
+                "frequency": frequency,
                 "fuzzy_score": fuzz.ratio(" ".join(map(str, combination_key)), matched_group)
             })
         else:
-            # Create a new group
             grouped_results[key_for_fuzzy] = {
                 "combinations": [{
                     "combination": combination_key,
                     "combination_percentage": percentage,
-                    "fuzzy_score": 100  # 100 for the exact match (since it's the first entry in this group)
+                    "frequency": frequency,
+                    "fuzzy_score": 100
                 }],
-                "total_percentage": percentage
+                "total_percentage": percentage,
+                "total_frequency": frequency
             }
-    
-    # Summing up the total percentage for each group
+
     for group in grouped_results.values():
         group["total_percentage"] = sum([item["combination_percentage"] for item in group["combinations"]])
+        group["total_frequency"] = sum([item["frequency"] for item in group["combinations"]])
 
     return grouped_results
 
