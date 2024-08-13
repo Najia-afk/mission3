@@ -1,13 +1,14 @@
 import matplotlib.pyplot as plt
 import matplotlib.cm as cm
 import numpy as np
-import os, json, logging, csv
+import os
 import pandas as pd
 import seaborn as sns
-from collections import defaultdict
-from itertools import combinations
-from fuzzywuzzy import fuzz, process
-import ast
+import logging
+
+# Set up logging
+logging.basicConfig(level=logging.INFO)
+
 
 def filter_metadata_and_dataframes(combined_metadata, dfs):
     """
@@ -38,13 +39,13 @@ def filter_metadata_and_dataframes(combined_metadata, dfs):
     
     return combined_metadata, dfs
 
-def plot_scatter_for_metadata(combined_metadata, output_dir='graph'):
+def plot_scatter_for_metadata(combined_metadata, graph_dir='graph'):
     """
     Generate scatter plots for each DataFrame in the combined metadata.
     Plots Duplicate Percentage vs. Fill Percentage for each Column Name,
     grouping points with similar values and separating them in the legend.
     """
-    os.makedirs(output_dir, exist_ok=True)
+    os.makedirs(graph_dir, exist_ok=True)
     
     for df_name in combined_metadata['DataFrame'].unique():
         df_metadata = combined_metadata[combined_metadata['DataFrame'] == df_name]
@@ -109,13 +110,11 @@ def plot_scatter_for_metadata(combined_metadata, output_dir='graph'):
         print(f"Scatter plot for '{df_name}' has been generated and saved as '{output_path}'.")
 
 def remove_url_column(df):
-    print("Removal of column 'url'")
-    df.drop(columns=['url'], inplace=True)
-    print("Column 'url' has been removed")
-
+    if 'url' in df.columns:
+        df.drop(columns=['url'], inplace=True)
+        logging.info("Column 'url' has been removed")
 
 def check_datetime_consistency(df, timestamp_column, datetime_column, log_dir='logs'):
-    print(f"Check for differences between '{timestamp_column}' and '{datetime_column}'")
     os.makedirs(log_dir, exist_ok=True)
     log_path = os.path.join(log_dir, f'{datetime_column}_log.csv')
     discrepancies = []
@@ -139,64 +138,39 @@ def check_datetime_consistency(df, timestamp_column, datetime_column, log_dir='l
                 discrepancies.append((idx, timestamp_date, datetime_date))
 
     if discrepancies:
-        print(f"Found {len(discrepancies)} discrepancies between '{timestamp_column}' and '{datetime_column}'. Please review the log before proceeding.")
+        logging.warning(f"Found {len(discrepancies)} discrepancies between '{timestamp_column}' and '{datetime_column}'. Please review the log before proceeding.")
     else:
         df.drop(columns=[timestamp_column], inplace=True)
-        print(f"No significant discrepancies found, '{timestamp_column}' has been dropped.")
+        logging.info(f"No significant discrepancies found, '{timestamp_column}' has been dropped.")
 
+def check_field_frequency(df, fields, temp_dir, graph_dir, generic_name):
+    os.makedirs(temp_dir, exist_ok=True)
+    os.makedirs(graph_dir, exist_ok=True)
 
-def check_field_consistency(df, fields, log_dir, output_dir, generic_name):
-    """
-    Analyzes the consistency across specified fields, logs discrepancies, and generates histograms.
-
-    Parameters:
-    df (pd.DataFrame): The DataFrame containing the data.
-    fields (list): List of field names to analyze.
-    log_dir (str): Directory to save logs.
-    output_dir (str): Directory to save plots.
-    generic_name (str): Generic name for naming logs and plots.
-    """
-    # Create necessary directories
-    os.makedirs(log_dir, exist_ok=True)
-    os.makedirs(output_dir, exist_ok=True)
-
-    # Step 1: Create unique combinations and count occurrences
     df[f'{generic_name}_combination'] = df.apply(lambda x: tuple(x[field] for field in fields), axis=1)
     combination_counts = df[f'{generic_name}_combination'].value_counts()
 
-    # Step 2: Log the combinations and their frequencies
-    combination_log_path = os.path.join(log_dir, f'{generic_name}_combination_log.csv')
+    combination_log_path = os.path.join(temp_dir, f'{generic_name}_combination_log.csv')
     combination_counts.to_csv(combination_log_path, header=['Frequency'])
 
-    # Step 3: Analyze consistency for each first field value
     first_field = fields[0]
     field_groupings = df.groupby(first_field)[fields[1:]].nunique()
-    inconsistent_entries = field_groupings[(field_groupings > 1).any(axis=1)]
+    frequency_entries = field_groupings[(field_groupings > 1).any(axis=1)]
     
-    # Step 4: Log inconsistent mappings
-    inconsistent_log_path = os.path.join(log_dir, f'inconsistent_{generic_name}_mappings.csv')
-    inconsistent_entries.to_csv(inconsistent_log_path)
+    frequency_temp_path = os.path.join(temp_dir, f'frequency_{generic_name}_mappings.csv')
+    frequency_entries.to_csv(frequency_temp_path)
 
-    # Step 5: Plot the histogram for the combination frequencies
-    draw_histogram_for_field_combinations(combination_counts, output_dir, generic_name)
+    draw_histogram_for_field_combinations(combination_counts, graph_dir, generic_name)
     
-    # Step 6: Analyze if we can drop other fields
-    if inconsistent_entries.empty:
-        df.drop(columns=fields[1:], inplace=True)
-        print(f"Columns {fields[1:]} have been dropped as they are identical to '{first_field}'")
-    else:
-        print(f"Inconsistencies found in {generic_name}. Check the log for more details. Keeping all columns.")
+    logging.info(f"Check the {generic_name} for more details about fields frequency.")
 
-def draw_histogram_for_field_combinations(combination_counts, output_dir, generic_name):
-    # Plot the full histogram with all data
+def draw_histogram_for_field_combinations(combination_counts, graph_dir, generic_name):
     plt.figure(figsize=(10, 6))
     sns.histplot(combination_counts, kde=True, bins=20, color='blue', alpha=0.6)
     
     mean_val = combination_counts.mean()
     median_val = combination_counts.median()
     std_val = combination_counts.std()
-
-    # Use a more conventional outlier threshold, e.g., mean + 3 * std
     outlier_threshold = mean_val + 3 * std_val
     num_outliers = (combination_counts > outlier_threshold).sum()
 
@@ -205,7 +179,6 @@ def draw_histogram_for_field_combinations(combination_counts, output_dir, generi
     plt.axvline(mean_val + std_val, color='b', linestyle=':', label=f'Std Dev (+): {mean_val + std_val:.2f}')
     plt.axvline(mean_val - std_val, color='b', linestyle=':', label=f'Std Dev (-): {mean_val - std_val:.2f}')
 
-    # Annotate outliers
     if num_outliers > 0:
         plt.text(outlier_threshold, plt.ylim()[1] * 0.9, f'{num_outliers} outliers detected', color='black')
 
@@ -216,12 +189,10 @@ def draw_histogram_for_field_combinations(combination_counts, output_dir, generi
     plt.tight_layout()
 
     file_name = f"{generic_name}_combination_histogram_all_data.png"
-    plt.savefig(os.path.join(output_dir, file_name))
+    plt.savefig(os.path.join(graph_dir, file_name))
     plt.close()
 
-    # Plot the histogram without outliers
     clipped_combination_counts = combination_counts[combination_counts <= outlier_threshold]
-
     plt.figure(figsize=(10, 6))
     sns.histplot(clipped_combination_counts, kde=True, bins=20, color='green', alpha=0.6)
     
@@ -241,84 +212,34 @@ def draw_histogram_for_field_combinations(combination_counts, output_dir, generi
     plt.tight_layout()
 
     clipped_file_name = f"{generic_name}_combination_histogram_without_outliers.png"
-    plt.savefig(os.path.join(output_dir, clipped_file_name))
+    plt.savefig(os.path.join(graph_dir, clipped_file_name))
     plt.close()
 
-    print(f"{num_outliers} outliers were excluded from the second plot.")
+    logging.info(f"{num_outliers} outliers were excluded from the second plot.")
 
 
 
-def safe_eval(x):
-    try:
-        # Replace 'nan' with a proper NaN representation
-        x = x.replace('nan', 'None')  # Replace string 'nan' with 'None'
-        return ast.literal_eval(x)
-    except Exception as e:
-        logging.error(f"Error evaluating string: {x}, error: {e}")
-        return None
-
-# Function to group combinations using fuzzy matching
-def group_combinations_with_fuzzy(log_file, threshold=85):
-    combination_log = pd.read_csv(log_file, index_col=0)
-    combination_log.index = combination_log.index.map(safe_eval)
-
-    total_frequency = combination_log['Frequency'].sum()
-    grouped_results = {}
-
-    for combination, row in combination_log.iterrows():
-        frequency = row['Frequency']
-        percentage = (frequency / total_frequency) * 100
-        combination_key = tuple(combination)
-        key_for_fuzzy = f"{combination_key[1]} {combination_key[2]}"
-
-        matched_group = None
-        if grouped_results:
-            match_info = process.extractOne(key_for_fuzzy, grouped_results.keys(), scorer=fuzz.ratio)
-            if match_info and match_info[1] >= threshold:
-                matched_group = match_info[0]
-
-        if matched_group:
-            grouped_results[matched_group]["combinations"].append({
-                "combination": combination_key,
-                "combination_percentage": percentage,
-                "frequency": frequency,
-                "fuzzy_score": fuzz.ratio(" ".join(map(str, combination_key)), matched_group)
-            })
-        else:
-            grouped_results[key_for_fuzzy] = {
-                "combinations": [{
-                    "combination": combination_key,
-                    "combination_percentage": percentage,
-                    "frequency": frequency,
-                    "fuzzy_score": 100
-                }],
-                "total_percentage": percentage,
-                "total_frequency": frequency
-            }
-
-    for group in grouped_results.values():
-        group["total_percentage"] = sum([item["combination_percentage"] for item in group["combinations"]])
-        group["total_frequency"] = sum([item["frequency"] for item in group["combinations"]])
-
-    return grouped_results
-
-def save_grouped_results_to_json(grouped_results, file_path):
-    with open(file_path, 'w') as json_file:
-        json.dump(grouped_results, json_file, indent=4, default=str)
-
-# Example usage in the process_dataframe function
-def process_dataframe(df, log_dir='logs', output_dir='graph'):
+def process_dataframe(df, log_dir='logs', temp_dir='temp', graph_dir='graph'):
     os.makedirs(log_dir, exist_ok=True)
-    os.makedirs(output_dir, exist_ok=True)
+    os.makedirs(temp_dir, exist_ok=True)
+    os.makedirs(graph_dir, exist_ok=True)
 
-    # Assuming that the log file name is based on the 'countries' field consistency check
-    log_file = os.path.join(log_dir, 'countries_combination_log.csv')
+    #remove_url_column(df)
+
+    # Optimize date columns
+    check_datetime_consistency(df, 'created_t', 'created_datetime', log_dir='logs')
+    check_datetime_consistency(df, 'last_modified_t', 'last_modified_datetime', log_dir='logs')
     
-    # Group combinations and calculate statistics from the log
-    grouped_results = group_combinations_with_fuzzy(log_file, threshold=85)
+    # Field frequency checks
+    checks = [
+        (['countries', 'countries_tags', 'countries_fr'], 'countries'),
+        (['ingredients_from_palm_oil_n', 'ingredients_that_may_be_from_palm_oil_n'], 'ingredients_palm_oil'),
+        (['nutrition_grade_fr', 'nutrition-score-fr_100g', 'nutrition-score-uk_100g'], 'nutrition'),
+        (['brands_tags', 'brands'], 'brands'),
+        (['additives_n', 'additives'], 'additives'),
+        (['states', 'states_tags', 'states_fr'], 'states')
+    ]
+    for fields, generic_name in checks:
+        check_field_frequency(df, fields, temp_dir, graph_dir, generic_name)
 
-    # Save the grouped structure to a JSON file
-    save_grouped_results_to_json(grouped_results, os.path.join(log_dir, 'grouped_results.json'))
-
-    # Assuming further processing of the DataFrame is done here
     return df

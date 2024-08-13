@@ -3,6 +3,7 @@ from scripts.df_metadata import display_metadata_dfs, create_metadata_dfs, enric
 from scripts.fetch_data_fields import fetch_and_compare_data_fields
 from scripts.build_data_fields_config import build_data_fields_config
 from scripts.df_filtering import filter_metadata_and_dataframes, process_dataframe
+from scripts.df_fuzzy_wuzzy import fuzzy_dataframe  # Import the fuzzy matching function
 import os, json
 import pandas as pd
 import gc
@@ -19,8 +20,6 @@ def main():
     if not check_directory_exists(dataset_directory):
         print(f"Error: Directory '{dataset_directory}' does not exist.")
         return
-
-    
 
     # Optionally, you can define a list of specific files to process
     specific_files = ['fr.openfoodfacts.org.products.csv']  # Set to None to process all files
@@ -78,7 +77,7 @@ def main():
 
     combined_metadata_path = os.path.join(output_dir, 'combined_metadata.csv')
     combined_metadata.to_csv(combined_metadata_path, index=False)
-    print(f"combined_metadata {combined_metadata.shape} has been saved or updated.")
+    print(f"Combined metadata {combined_metadata.shape} has been saved or updated.")
 
     # Save the filtered DataFrames to individual CSVs or as needed
     for df_name, df in filtered_dfs.items():
@@ -94,14 +93,16 @@ def main():
     specific_files = ['filtered_fr.openfoodfacts.org.products.csv']
     dfs = load_or_cache_dataframes(dataset_directory, CACHE_DIR, file_list=specific_files)
 
-
     df_name = 'filtered_fr.openfoodfacts.org.products'
     if df_name in dfs:
         processed_df = process_dataframe(dfs[df_name])
         df_output_path = os.path.join(dataset_directory, f'processed_{df_name}.csv')
         processed_df.to_csv(df_output_path, index=False)
-        print(f"Filtered DataFrame 'processed_{df_name}' {processed_df.shape} has been saved")
+        print(f"Processed DataFrame 'processed_{df_name}' {processed_df.shape} has been saved")
 
+        # Perform fuzzy matching and grouping
+        fuzzy_dataframe(temp_dir='data/temp', config_dir='config')
+        print(f"Fuzzy grouping results have been saved to the config directory.")
 
     else:
         print(f"DataFrame '{df_name}' not found in the loaded DataFrames.")
