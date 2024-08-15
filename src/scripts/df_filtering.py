@@ -225,7 +225,7 @@ def plot_scatter_with_clustering(df_metadata, graph_dir='graph'):
             
             # Annotate the plot with the field names for each cluster
             field_names = cluster_field_dict[cluster]
-            field_lines = [", ".join(field_names[i:i+3]) for i in range(0, len(field_names), 3)]
+            field_lines = [", ".join(field_names[i:i+2]) for i in range(0, len(field_names), 2)]
             field_text = "\n".join(field_lines)
             
             # Compute annotation position (left of the ellipse)
