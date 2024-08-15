@@ -9,6 +9,7 @@ from sklearn.cluster import DBSCAN
 from matplotlib.patches import Ellipse
 from matplotlib.collections import PathCollection
 
+
 # Set up logging
 logging.basicConfig(level=logging.INFO)
 
@@ -40,33 +41,118 @@ def filter_metadata_and_dataframes(combined_metadata, dfs):
     
     return combined_metadata, dfs
 
-def adjust_annotation_position(annotation, x, y, padding=0.5):
-    """ Adjust the position of the annotation to avoid overlap with data points or other annotations. """
-    bbox = annotation.get_window_extent()
-    bbox = bbox.transformed(plt.gca().transData.inverted())
 
-    # Check for overlap with other artists
-    for artist in plt.gca().get_children():
-        if isinstance(artist, plt.Line2D) or isinstance(artist, PathCollection):
-            continue
-        if isinstance(artist, plt.Text):
-            artist_bbox = artist.get_window_extent()
-            artist_bbox = artist_bbox.transformed(plt.gca().transData.inverted())
-            intersection_bbox = bbox.intersection(artist_bbox)  # Correctly pass the second bbox for intersection
-            if intersection_bbox is not None and not intersection_bbox.is_empty():  # Check for non-empty intersection
-                # Move annotation down by padding
-                y -= padding
-                bbox = bbox.translated(0, -padding)
-    
-    # Ensure annotations are within plot limits
+def get_bbox_properties(bbox):
+    """ Extract the properties of a bounding box. """
+    return {
+        'left': bbox.x0,
+        'right': bbox.x1,
+        'top': bbox.y1,
+        'bottom': bbox.y0
+    }
+
+def rectangles_intersect(r1, r2):
+    """ Check if two rectangles intersect. """
+    return not (r2['left'] > r1['right'] or
+                r2['right'] < r1['left'] or
+                r2['top'] > r1['bottom'] or
+                r2['bottom'] < r1['top'])
+
+def is_within_limits(x, y):
     xlim = plt.xlim()
     ylim = plt.ylim()
-    x = min(max(x, xlim[0] + 0.1 * (xlim[1] - xlim[0])), xlim[1] - 0.1 * (xlim[1] - xlim[0]))
-    y = min(max(y, ylim[0] + 0.1 * (ylim[1] - ylim[0])), ylim[1] - 0.1 * (ylim[1] - ylim[0]))
+    return xlim[0] <= x <= xlim[1] and ylim[0] <= y <= ylim[1]
+
+def adjust_position(x, y):
+    """ Ensure the annotation stays within plot limits. """
+    xlim = plt.xlim()
+    ylim = plt.ylim()
+    x_margin = 0.05 * (xlim[1] - xlim[0])
+    y_margin = 0.05 * (ylim[1] - ylim[0])
+    new_x = min(max(x, xlim[0] + x_margin), xlim[1] - x_margin)
+    new_y = min(max(y, ylim[0] + y_margin), ylim[1] - y_margin)
+    return new_x, new_y
+
+def adjust_annotation_position(annotation, x, y, padding=10, max_attempts=10000):
+    """ Adjust the position of the annotation to avoid overlap with data points or other annotations. """
     
-    return x, y
+    # Initialize the position and the last valid position
+    current_x, current_y = x, y
+    last_valid_x, last_valid_y = adjust_position(current_x, current_y)
 
+    # Compute initial annotation bbox
+    bbox = annotation.get_window_extent()
+    bbox = bbox.transformed(plt.gca().transData.inverted())
+    bbox_props = get_bbox_properties(bbox)
+    
+    attempts = 0
+    while attempts < max_attempts:
+        # Generate random movement within the range [-padding, padding]
+        dx = np.random.uniform(-padding, padding)
+        dy = np.random.uniform(-padding, padding)
+        
+        new_x = current_x + dx
+        new_y = current_y + dy
+        
+        # Ensure the new position is within plot limits
+        new_x, new_y = adjust_position(new_x, new_y)
+        
+        # Compute new annotation bbox
+        annotation.set_position((new_x, new_y))
+        bbox = annotation.get_window_extent()
+        bbox = bbox.transformed(plt.gca().transData.inverted())
+        bbox_props = get_bbox_properties(bbox)
 
+        # Check for overlap with other annotations and data points
+        overlap_found = False
+        for artist in plt.gca().get_children():
+            if isinstance(artist, plt.Line2D) or isinstance(artist, PathCollection):
+                # Check for overlap with data points
+                artist_bbox = artist.get_window_extent()
+                artist_bbox = artist_bbox.transformed(plt.gca().transData.inverted())
+                artist_bbox_props = get_bbox_properties(artist_bbox)
+                if rectangles_intersect(bbox_props, artist_bbox_props):
+                    overlap_found = True
+                    break
+
+            if isinstance(artist, plt.Text):
+                # Check for overlap with other text annotations
+                artist_bbox = artist.get_window_extent()
+                artist_bbox = artist_bbox.transformed(plt.gca().transData.inverted())
+                artist_bbox_props = get_bbox_properties(artist_bbox)
+                if rectangles_intersect(bbox_props, artist_bbox_props):
+                    overlap_found = True
+                    break
+
+            if isinstance(artist, Ellipse):
+                # Check for overlap with ellipses representing clusters
+                artist_bbox = artist.get_window_extent()
+                artist_bbox = artist_bbox.transformed(plt.gca().transData.inverted())
+                artist_bbox_props = get_bbox_properties(artist_bbox)
+                if rectangles_intersect(bbox_props, artist_bbox_props):
+                    overlap_found = True
+                    break
+        
+        # If no overlap and within bounds, return the new position
+        if not overlap_found and (
+            bbox_props['left'] >= plt.xlim()[0] and
+            bbox_props['right'] <= plt.xlim()[1] and
+            bbox_props['bottom'] >= plt.ylim()[0] and
+            bbox_props['top'] <= plt.ylim()[1]):
+            return new_x, new_y
+        
+        # Update last valid position only if the new position is within bounds
+        if bbox_props['left'] >= plt.xlim()[0] and \
+           bbox_props['right'] <= plt.xlim()[1] and \
+           bbox_props['bottom'] >= plt.ylim()[0] and \
+           bbox_props['top'] <= plt.ylim()[1]:
+            last_valid_x, last_valid_y = new_x, new_y
+        
+        # Increment attempt counter
+        attempts += 1
+
+    # Return the last valid position if max_attempts reached
+    return last_valid_x, last_valid_y
 
 def plot_scatter_with_clustering(df_metadata, graph_dir='graph'):
     # Ensure the output directory exists
@@ -143,14 +229,11 @@ def plot_scatter_with_clustering(df_metadata, graph_dir='graph'):
             field_text = "\n".join(field_lines)
             
             # Compute annotation position (left of the ellipse)
-            annot_x = mean_dup - 1 * std_dup - 25 - std_fill * 3
-            annot_y = mean_fill - 5
+            annot_x = mean_dup
+            annot_y = mean_fill
             
             # Ensure annotations are within plot limits
-            xlim = plt.xlim()
-            ylim = plt.ylim()
-            annot_x = min(max(annot_x, xlim[0] + 0.1 * (xlim[1] - xlim[0])), xlim[1] - 0.1 * (xlim[1] - xlim[0]))
-            annot_y = min(max(annot_y, ylim[0] + 0.1 * (ylim[1] - ylim[0])), ylim[1] - 0.1 * (ylim[1] - ylim[0]))
+            annot_x, annot_y = adjust_position(annot_x, annot_y)
             
             # Add annotation and arrow in one go
             annot = plt.annotate(field_text, xy=(mean_dup, mean_fill), xytext=(annot_x, annot_y),
