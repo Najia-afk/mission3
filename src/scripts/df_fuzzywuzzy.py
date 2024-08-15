@@ -22,6 +22,12 @@ def group_combinations_with_fuzzy(log_file, threshold=85):
         frequency = row['Frequency']
         percentage = (frequency / total_frequency) * 100
         combination_key = tuple(combination)
+
+        # Ensure that the combination_key has at least three elements
+        if len(combination_key) < 3:
+            logging.warning(f"Skipping combination with insufficient elements: {combination_key}")
+            continue
+
         key_for_fuzzy = f"{combination_key[1]} {combination_key[2]}"
 
         matched_group = None
@@ -59,7 +65,7 @@ def save_grouped_results_to_json(grouped_results, file_path):
     with open(file_path, 'w') as json_file:
         json.dump(grouped_results, json_file, indent=4, default=str)
 
-def fuzzy_dataframe(temp_dir='data/temp', config_dir='config'):
+def fuzzy_dataframe(temp_dir='temp', config_dir='config'):
     os.makedirs(temp_dir, exist_ok=True)
     os.makedirs(config_dir, exist_ok=True)
 
@@ -67,9 +73,9 @@ def fuzzy_dataframe(temp_dir='data/temp', config_dir='config'):
     checks = [
         (['countries', 'countries_tags', 'countries_fr'], 'countries'),
         (['ingredients_from_palm_oil_n', 'ingredients_that_may_be_from_palm_oil_n'], 'ingredients_palm_oil'),
-        (['nutrition_grade_fr', 'nutrition-score-fr_100g', 'nutrition-score-uk_100g'], 'nutrition'),
+        #(['nutrition_grade_fr', 'nutrition-score-fr_100g', 'nutrition-score-uk_100g'], 'nutrition'),
         (['brands_tags', 'brands'], 'brands'),
-        (['additives_n', 'additives'], 'additives'),
+        #(['additives_n', 'additives'], 'additives'),
         (['states', 'states_tags', 'states_fr'], 'states')
     ]
     
@@ -87,7 +93,7 @@ def fuzzy_dataframe(temp_dir='data/temp', config_dir='config'):
         json_file_path = os.path.join(config_dir, f'{generic_name}_grouped_results.json')
         save_grouped_results_to_json(grouped_results, json_file_path)
         
-        logging.info(f"Grouped results for {generic_name} saved to {json_file_path}")
+        logging.info(f"Grouped results for {generic_name} has been generated")
 
     logging.info("Fuzzy matching and grouping completed for all checks.")
 

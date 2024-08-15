@@ -5,10 +5,12 @@ import os
 import pandas as pd
 import seaborn as sns
 import logging
+from sklearn.cluster import DBSCAN
+from matplotlib.patches import Ellipse
+from matplotlib.collections import PathCollection
 
 # Set up logging
 logging.basicConfig(level=logging.INFO)
-
 
 def filter_metadata_and_dataframes(combined_metadata, dfs):
     """
@@ -16,11 +18,10 @@ def filter_metadata_and_dataframes(combined_metadata, dfs):
     the related DataFrames to keep only the columns that remain in the filtered metadata.
     """
     # Filter out rows in combined_metadata where 'Fill Percentage' < 50
-    combined_metadata = combined_metadata[combined_metadata['Fill Percentage'] >= 50].copy()
+    combined_metadata = combined_metadata[combined_metadata['Fill Percentage'] >= 40].copy()
     
     # Iterate over the filtered metadata to update the DataFrames
     for df_name in combined_metadata['DataFrame'].unique():
-        
         # Get the relevant DataFrame
         if df_name in dfs:
             df = dfs[df_name]
@@ -30,84 +31,149 @@ def filter_metadata_and_dataframes(combined_metadata, dfs):
             filtered_df = df[columns_to_keep]
             # Replace the original DataFrame with the filtered one
             dfs[df_name] = filtered_df
-            print(f"Updated DataFrame '{df_name}' to retain only relevant columns.")
+            logging.info(f"Updated DataFrame '{df_name}' to retain only relevant columns.")
         else:
-            print(f"DataFrame '{df_name}' not found in the provided DataFrames.")
+            logging.warning(f"DataFrame '{df_name}' not found in the provided DataFrames.")
     
     # Generate scatter plots for each DataFrame in the metadata
-    plot_scatter_for_metadata(combined_metadata)
+    plot_scatter_with_clustering(combined_metadata)
     
     return combined_metadata, dfs
 
-def plot_scatter_for_metadata(combined_metadata, graph_dir='graph'):
-    """
-    Generate scatter plots for each DataFrame in the combined metadata.
-    Plots Duplicate Percentage vs. Fill Percentage for each Column Name,
-    grouping points with similar values and separating them in the legend.
-    """
+def adjust_annotation_position(annotation, x, y, padding=0.5):
+    """ Adjust the position of the annotation to avoid overlap with data points or other annotations. """
+    bbox = annotation.get_window_extent()
+    bbox = bbox.transformed(plt.gca().transData.inverted())
+
+    # Check for overlap with other artists
+    for artist in plt.gca().get_children():
+        if isinstance(artist, plt.Line2D) or isinstance(artist, PathCollection):
+            continue
+        if isinstance(artist, plt.Text):
+            artist_bbox = artist.get_window_extent()
+            artist_bbox = artist_bbox.transformed(plt.gca().transData.inverted())
+            intersection_bbox = bbox.intersection(artist_bbox)  # Correctly pass the second bbox for intersection
+            if intersection_bbox is not None and not intersection_bbox.is_empty():  # Check for non-empty intersection
+                # Move annotation down by padding
+                y -= padding
+                bbox = bbox.translated(0, -padding)
+    
+    # Ensure annotations are within plot limits
+    xlim = plt.xlim()
+    ylim = plt.ylim()
+    x = min(max(x, xlim[0] + 0.1 * (xlim[1] - xlim[0])), xlim[1] - 0.1 * (xlim[1] - xlim[0]))
+    y = min(max(y, ylim[0] + 0.1 * (ylim[1] - ylim[0])), ylim[1] - 0.1 * (ylim[1] - ylim[0]))
+    
+    return x, y
+
+
+
+def plot_scatter_with_clustering(df_metadata, graph_dir='graph'):
+    # Ensure the output directory exists
     os.makedirs(graph_dir, exist_ok=True)
     
-    for df_name in combined_metadata['DataFrame'].unique():
-        df_metadata = combined_metadata[combined_metadata['DataFrame'] == df_name]
+    # Filter data based on Fill Percentage
+    df_filtered = df_metadata[(df_metadata['Fill Percentage'] >= 40) & (df_metadata['Fill Percentage'] <= 100)]
+    
+    if df_filtered.empty:
+        logging.info("No data to plot after filtering.")
+        return
+    
+    # Prepare data for clustering
+    X = df_filtered[['Duplicate Percentage', 'Fill Percentage']].values
+    
+    # Apply DBSCAN clustering
+    clustering = DBSCAN(eps=3, min_samples=2).fit(X)
+    df_filtered['Cluster'] = clustering.labels_
 
-        # Drop rows with NaN in 'Fill Percentage' or 'Duplicate Percentage'
-        df_metadata = df_metadata.dropna(subset=['Fill Percentage', 'Duplicate Percentage'])
-
-        if df_metadata.empty:
-            print(f"No valid data for plotting in '{df_name}'. Skipping.")
-            continue
-
-        # Ensure Fill Percentage is greater than or equal to Duplicate Percentage
-        #df_metadata = df_metadata[df_metadata['Fill Percentage'] >= df_metadata['Duplicate Percentage']]
-
-        # Sort the metadata by Duplicate Percentage and Fill Percentage
-        df_metadata = df_metadata.sort_values(by=['Duplicate Percentage', 'Fill Percentage'], ascending=[False, False])
-
-        # Plotting
-        plt.figure(figsize=(21, 15))
-        num_points = len(df_metadata)
-        colors = cm.rainbow(np.linspace(0, 1, num_points))
-
-        plt.scatter(df_metadata['Duplicate Percentage'], df_metadata['Fill Percentage'], s=100, c=colors, alpha=0.6)
-
-        # Create grouped legend items
-        legend_items = []
-        previous_group = None
-        group_threshold = 4  # Define threshold for grouping (1% difference)
-
-        for i, (index, row) in enumerate(df_metadata.iterrows()):
-            current_group = (row['Duplicate Percentage'] // group_threshold, row['Fill Percentage'] // group_threshold)
+    # Plotting
+    plt.figure(figsize=(12, 8))
+    
+    # Define a color map for clusters
+    unique_clusters = np.unique(df_filtered['Cluster'])
+    num_clusters = len(unique_clusters)
+    colors = plt.cm.get_cmap('tab10', num_clusters)
+    
+    # Create a dictionary to keep track of field names for each cluster
+    cluster_field_dict = {cluster: [] for cluster in unique_clusters if cluster != -1}
+    
+    for index, row in df_filtered.iterrows():
+        if row['Cluster'] != -1:
+            cluster_field_dict[row['Cluster']].append(row['Column Name'])
+    
+    # Plot each cluster
+    for cluster in unique_clusters:
+        if cluster == -1:
+            # Plot and annotate outliers
+            outlier_data = df_filtered[df_filtered['Cluster'] == -1]
+            for _, row in outlier_data.iterrows():
+                plt.scatter(row['Duplicate Percentage'], row['Fill Percentage'], 
+                            color='red', s=100, label='Outlier', edgecolor='black')
+                annot = plt.annotate(row['Column Name'], 
+                                     xy=(row['Duplicate Percentage'], row['Fill Percentage']),
+                                     xytext=(row['Duplicate Percentage'], row['Fill Percentage'] - 2),
+                                     fontsize=8, color='red',
+                                     bbox=dict(boxstyle="round,pad=0.3", edgecolor='red', facecolor='none'),
+                                     arrowprops=dict(arrowstyle="->", color='red'))
+                
+                # Adjust annotation position to avoid overlap
+                new_x, new_y = adjust_annotation_position(annot, row['Duplicate Percentage'], row['Fill Percentage'])
+                annot.set_position((new_x, new_y))
+        else:
+            cluster_data = df_filtered[df_filtered['Cluster'] == cluster]
             
-            if previous_group is not None and current_group != previous_group:
-                legend_items.append(plt.Line2D([0], [0], color='none', label=" "))  # Add empty space between groups
+            # Plot the data points
+            plt.scatter(cluster_data['Duplicate Percentage'], cluster_data['Fill Percentage'], 
+                        label=f'Cluster {cluster}', alpha=0.6, color=colors(cluster), s=100)
             
-            legend_items.append(plt.Line2D([0], [0], marker='o', color='w', 
-                                           label=f"{row['Column Name']} (D: {row['Duplicate Percentage']:.2f}%, F: {row['Fill Percentage']:.2f}%)",
-                                           markerfacecolor=colors[min(i, len(colors)-1)], markersize=10))
-            previous_group = current_group
+            # Plot an ellipse to show cluster range
+            mean_dup = cluster_data['Duplicate Percentage'].mean()
+            mean_fill = cluster_data['Fill Percentage'].mean()
+            std_dup = cluster_data['Duplicate Percentage'].std()
+            std_fill = cluster_data['Fill Percentage'].std()
+            
+            ellipse = Ellipse(xy=(mean_dup, mean_fill), 
+                              width=2*std_dup, height=2*std_fill, 
+                              edgecolor=colors(cluster), facecolor='none', linestyle='--')
+            plt.gca().add_patch(ellipse)
+            
+            # Annotate the plot with the field names for each cluster
+            field_names = cluster_field_dict[cluster]
+            field_lines = [", ".join(field_names[i:i+3]) for i in range(0, len(field_names), 3)]
+            field_text = "\n".join(field_lines)
+            
+            # Compute annotation position (left of the ellipse)
+            annot_x = mean_dup - 1 * std_dup - 25 - std_fill * 3
+            annot_y = mean_fill - 5
+            
+            # Ensure annotations are within plot limits
+            xlim = plt.xlim()
+            ylim = plt.ylim()
+            annot_x = min(max(annot_x, xlim[0] + 0.1 * (xlim[1] - xlim[0])), xlim[1] - 0.1 * (xlim[1] - xlim[0]))
+            annot_y = min(max(annot_y, ylim[0] + 0.1 * (ylim[1] - ylim[0])), ylim[1] - 0.1 * (ylim[1] - ylim[0]))
+            
+            # Add annotation and arrow in one go
+            annot = plt.annotate(field_text, xy=(mean_dup, mean_fill), xytext=(annot_x, annot_y),
+                                 fontsize=8, color=colors(cluster),
+                                 bbox=dict(boxstyle="round,pad=0.3", edgecolor=colors(cluster), facecolor='none'),
+                                 arrowprops=dict(arrowstyle="->", color=colors(cluster), 
+                                                 connectionstyle="arc3,rad=0"))
+            
+            # Adjust annotation position to avoid overlap
+            new_x, new_y = adjust_annotation_position(annot, mean_dup, mean_fill)
+            annot.set_position((new_x, new_y))
 
-        
-        plt.xlabel('Duplicate Percentage')
-        plt.ylabel('Fill Percentage')
-        plt.grid(True)
-        
-        # Adjust layout to make room for the legend
-        plt.subplots_adjust(left=0.10, right=0.75, top=0.9, bottom=0.1)
-
-        # Position legend outside the plot area
-        legend = plt.legend(handles=legend_items, loc='center left', bbox_to_anchor=(1.01, 0.5), 
-                            borderaxespad=0., title=f'Columns by Group ({group_threshold}%)', handlelength=1.5, handletextpad=0.8)
-
-        # Remove legend border
-        legend.get_frame().set_linewidth(0)
-        legend.get_frame().set_facecolor('none')
-
-        plt.title(f'Scatter Plot for {df_name} - Grouped by Duplicate & Fill Percentage', pad=20, loc='center')
-
-        output_path = os.path.join(output_dir, f'scatter_{df_name}.png')
-        plt.savefig(output_path, bbox_inches='tight')
-        plt.close()
-        print(f"Scatter plot for '{df_name}' has been generated and saved as '{output_path}'.")
+    plt.xlabel('Duplicate Percentage')
+    plt.ylabel('Fill Percentage')
+    plt.title('Scatter Plot with DBSCAN Clustering')
+    plt.grid(True)
+    
+    # Save plot
+    output_path = os.path.join(graph_dir, 'scatter_with_clustering.png')
+    plt.savefig(output_path, bbox_inches='tight')
+    plt.close()
+    
+    logging.info(f"Scatter plot with clustering saved as '{output_path}'.")
 
 def remove_url_column(df):
     if 'url' in df.columns:
@@ -162,7 +228,7 @@ def check_field_frequency(df, fields, temp_dir, graph_dir, generic_name):
 
     draw_histogram_for_field_combinations(combination_counts, graph_dir, generic_name)
     
-    logging.info(f"Check the {generic_name} for more details about fields frequency.")
+    logging.info(f"Check the {generic_name} combination file for more details about fields frequency.")
 
 def draw_histogram_for_field_combinations(combination_counts, graph_dir, generic_name):
     plt.figure(figsize=(10, 6))
@@ -227,8 +293,8 @@ def process_dataframe(df, log_dir='logs', temp_dir='temp', graph_dir='graph'):
     #remove_url_column(df)
 
     # Optimize date columns
-    check_datetime_consistency(df, 'created_t', 'created_datetime', log_dir='logs')
-    check_datetime_consistency(df, 'last_modified_t', 'last_modified_datetime', log_dir='logs')
+    #check_datetime_consistency(df, 'created_t', 'created_datetime', log_dir='logs')
+    #check_datetime_consistency(df, 'last_modified_t', 'last_modified_datetime', log_dir='logs')
     
     # Field frequency checks
     checks = [

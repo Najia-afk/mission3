@@ -74,6 +74,8 @@ def apply_generalities(config, generalities):
 
 # Main function to build the data fields config
 def build_data_fields_config(input_file=None, output_file=None):
+
+    
     # Get the directory where the script is located
     script_dir = os.path.dirname(os.path.abspath(__file__))
 

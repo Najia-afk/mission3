@@ -103,6 +103,7 @@ def load_and_process_data(directory, file_list=None, separator=','):
     return dfs
 
 def load_or_cache_dataframes(dataset_directory, cache_directory='data/cache', file_list=None, separator=','):
+    os.makedirs(cache_directory, exist_ok=True)
     """
     Load DataFrames from cache if available; otherwise, process and cache them.
     If file_list is provided, only process and cache those files.

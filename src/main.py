@@ -3,7 +3,8 @@ from scripts.df_metadata import display_metadata_dfs, create_metadata_dfs, enric
 from scripts.fetch_data_fields import fetch_and_compare_data_fields
 from scripts.build_data_fields_config import build_data_fields_config
 from scripts.df_filtering import filter_metadata_and_dataframes, process_dataframe
-from scripts.df_fuzzy_wuzzy import fuzzy_dataframe  # Import the fuzzy matching function
+from scripts.df_fuzzywuzzy import fuzzy_dataframe
+
 import os, json
 import pandas as pd
 import gc
@@ -101,7 +102,7 @@ def main():
         print(f"Processed DataFrame 'processed_{df_name}' {processed_df.shape} has been saved")
 
         # Perform fuzzy matching and grouping
-        fuzzy_dataframe(temp_dir='data/temp', config_dir='config')
+        fuzzy_dataframe(temp_dir='temp', config_dir='config')
         print(f"Fuzzy grouping results have been saved to the config directory.")
 
     else:
