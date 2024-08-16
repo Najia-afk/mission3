@@ -12,39 +12,31 @@ from matplotlib.collections import PathCollection
 # Set up logging
 logging.basicConfig(level=logging.INFO)
 
-def filter_metadata_and_dataframes(combined_metadata, dfs, fill_threshold=40):
+def filter_metadata_and_dataframes(combined_metadata, dfs):
     """
-    Filters combined_metadata to drop rows where 'Fill Percentage' < fill_threshold,
-    and then filters the related DataFrames to keep only the columns that remain in the filtered metadata.
+    Filters combined_metadata to drop rows where 'Fill Percentage' < 50, and then filters 
+    the related DataFrames to keep only the columns that remain in the filtered metadata.
     """
-    combined_metadata = combined_metadata[combined_metadata['Fill Percentage'] >= fill_threshold].copy()
+    # Filter out rows in combined_metadata where 'Fill Percentage' < 50
+    combined_metadata = combined_metadata[combined_metadata['Fill Percentage'] >= 40].copy()
     
+    # Iterate over the filtered metadata to update the DataFrames
     for df_name in combined_metadata['DataFrame'].unique():
+        # Get the relevant DataFrame
         if df_name in dfs:
             df = dfs[df_name]
+            # Get the columns to keep based on the filtered metadata
             columns_to_keep = combined_metadata[combined_metadata['DataFrame'] == df_name]['Column Name'].tolist()
-            dfs[df_name] = df[columns_to_keep]
+            # Filter the DataFrame
+            filtered_df = df[columns_to_keep]
+            # Replace the original DataFrame with the filtered one
+            dfs[df_name] = filtered_df
             logging.info(f"Updated DataFrame '{df_name}' to retain only relevant columns.")
         else:
             logging.warning(f"DataFrame '{df_name}' not found in the provided DataFrames.")
     
-    return combined_metadata, dfs
-
-def filter_metadata_and_dataframes(combined_metadata, dfs, fill_threshold=40):
-    """
-    Filters combined_metadata to drop rows where 'Fill Percentage' < fill_threshold,
-    and then filters the related DataFrames to keep only the columns that remain in the filtered metadata.
-    """
-    combined_metadata = combined_metadata[combined_metadata['Fill Percentage'] >= fill_threshold].copy()
-    
-    for df_name in combined_metadata['DataFrame'].unique():
-        if df_name in dfs:
-            df = dfs[df_name]
-            columns_to_keep = combined_metadata[combined_metadata['DataFrame'] == df_name]['Column Name'].tolist()
-            dfs[df_name] = df[columns_to_keep]
-            logging.info(f"Updated DataFrame '{df_name}' to retain only relevant columns.")
-        else:
-            logging.warning(f"DataFrame '{df_name}' not found in the provided DataFrames.")
+    # Generate scatter plots for each DataFrame in the metadata
+    plot_scatter_with_clustering(combined_metadata)
     
     return combined_metadata, dfs
 
@@ -222,7 +214,7 @@ def plot_scatter_with_clustering(df_metadata, graph_dir='graph'):
     plt.close()
     
     logging.info(f"Scatter plot with clustering saved as '{output_path}'.")
-    
+
 def remove_url_column(df):
     if 'url' in df.columns:
         df.drop(columns=['url'], inplace=True)
