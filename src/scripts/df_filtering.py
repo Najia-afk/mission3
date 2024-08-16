@@ -63,14 +63,18 @@ def is_within_limits(x, y):
     ylim = plt.ylim()
     return xlim[0] <= x <= xlim[1] and ylim[0] <= y <= ylim[1]
 
-def adjust_position(x, y):
-    """ Ensure the annotation stays within plot limits. """
-    xlim = plt.xlim()
-    ylim = plt.ylim()
-    x_margin = 0.05 * (xlim[1] - xlim[0])
-    y_margin = 0.05 * (ylim[1] - ylim[0])
-    new_x = min(max(x, xlim[0] + x_margin), xlim[1] - x_margin)
-    new_y = min(max(y, ylim[0] + y_margin), ylim[1] - y_margin)
+def adjust_position(x, y, padding=0.1):
+    """""
+    Adjust the position of the annotation to ensure it stays within the grid of the plot.
+    The grid is defined by the x and y axis limits, not the entire plot area.
+    """
+    xlim = plt.gca().get_xlim()
+    ylim = plt.gca().get_ylim()
+
+    # Ensure x and y are within the grid limits
+    new_x = min(max(x, xlim[0] + padding * (xlim[1] - xlim[0])), xlim[1] - padding * (xlim[1] - xlim[0]))
+    new_y = min(max(y, ylim[0] + padding * (ylim[1] - ylim[0])), ylim[1] - padding * (ylim[1] - ylim[0]))
+
     return new_x, new_y
 
 def adjust_annotation_position(annotation, x, y, padding=10, max_attempts=10000):
