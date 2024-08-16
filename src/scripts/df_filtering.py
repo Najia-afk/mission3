@@ -9,54 +9,55 @@ from sklearn.cluster import DBSCAN
 from matplotlib.patches import Ellipse
 from matplotlib.collections import PathCollection
 
-
 # Set up logging
 logging.basicConfig(level=logging.INFO)
 
-def filter_metadata_and_dataframes(combined_metadata, dfs):
+def filter_metadata_and_dataframes(combined_metadata, dfs, fill_threshold=40):
     """
-    Filters combined_metadata to drop rows where 'Fill Percentage' < 50, and then filters 
-    the related DataFrames to keep only the columns that remain in the filtered metadata.
+    Filters combined_metadata to drop rows where 'Fill Percentage' < fill_threshold,
+    and then filters the related DataFrames to keep only the columns that remain in the filtered metadata.
     """
-    # Filter out rows in combined_metadata where 'Fill Percentage' < 50
-    combined_metadata = combined_metadata[combined_metadata['Fill Percentage'] >= 40].copy()
+    combined_metadata = combined_metadata[combined_metadata['Fill Percentage'] >= fill_threshold].copy()
     
-    # Iterate over the filtered metadata to update the DataFrames
     for df_name in combined_metadata['DataFrame'].unique():
-        # Get the relevant DataFrame
         if df_name in dfs:
             df = dfs[df_name]
-            # Get the columns to keep based on the filtered metadata
             columns_to_keep = combined_metadata[combined_metadata['DataFrame'] == df_name]['Column Name'].tolist()
-            # Filter the DataFrame
-            filtered_df = df[columns_to_keep]
-            # Replace the original DataFrame with the filtered one
-            dfs[df_name] = filtered_df
+            dfs[df_name] = df[columns_to_keep]
             logging.info(f"Updated DataFrame '{df_name}' to retain only relevant columns.")
         else:
             logging.warning(f"DataFrame '{df_name}' not found in the provided DataFrames.")
     
-    # Generate scatter plots for each DataFrame in the metadata
-    plot_scatter_with_clustering(combined_metadata)
+    return combined_metadata, dfs
+
+def filter_metadata_and_dataframes(combined_metadata, dfs, fill_threshold=40):
+    """
+    Filters combined_metadata to drop rows where 'Fill Percentage' < fill_threshold,
+    and then filters the related DataFrames to keep only the columns that remain in the filtered metadata.
+    """
+    combined_metadata = combined_metadata[combined_metadata['Fill Percentage'] >= fill_threshold].copy()
+    
+    for df_name in combined_metadata['DataFrame'].unique():
+        if df_name in dfs:
+            df = dfs[df_name]
+            columns_to_keep = combined_metadata[combined_metadata['DataFrame'] == df_name]['Column Name'].tolist()
+            dfs[df_name] = df[columns_to_keep]
+            logging.info(f"Updated DataFrame '{df_name}' to retain only relevant columns.")
+        else:
+            logging.warning(f"DataFrame '{df_name}' not found in the provided DataFrames.")
     
     return combined_metadata, dfs
 
-
 def get_bbox_properties(bbox):
     """ Extract the properties of a bounding box. """
-    return {
-        'left': bbox.x0,
-        'right': bbox.x1,
-        'top': bbox.y1,
-        'bottom': bbox.y0
-    }
+    return {'left': bbox.x0, 'right': bbox.x1, 'top': bbox.y1, 'bottom': bbox.y0}
 
-def rectangles_intersect(r1, r2):
+def rectangles_intersect(bbox1, bbox2):
     """ Check if two rectangles intersect. """
-    return not (r2['left'] > r1['right'] or
-                r2['right'] < r1['left'] or
-                r2['top'] > r1['bottom'] or
-                r2['bottom'] < r1['top'])
+    return not (bbox2['left'] > bbox1['right'] or
+                bbox2['right'] < bbox1['left'] or
+                bbox2['top'] > bbox1['bottom'] or
+                bbox2['bottom'] < bbox1['top'])
 
 def is_within_limits(x, y):
     xlim = plt.xlim()
@@ -64,7 +65,7 @@ def is_within_limits(x, y):
     return xlim[0] <= x <= xlim[1] and ylim[0] <= y <= ylim[1]
 
 def adjust_position(x, y, padding=0.1):
-    """""
+    """
     Adjust the position of the annotation to ensure it stays within the grid of the plot.
     The grid is defined by the x and y axis limits, not the entire plot area.
     """
@@ -77,41 +78,31 @@ def adjust_position(x, y, padding=0.1):
 
     return new_x, new_y
 
-def adjust_annotation_position(annotation, x, y, padding=10, max_attempts=10000):
+def adjust_annotation_position(annotation, x, y, padding=10, max_attempts=100):
     """ Adjust the position of the annotation to avoid overlap with data points or other annotations. """
-    
-    # Initialize the position and the last valid position
     current_x, current_y = x, y
     last_valid_x, last_valid_y = adjust_position(current_x, current_y)
 
-    # Compute initial annotation bbox
     bbox = annotation.get_window_extent()
     bbox = bbox.transformed(plt.gca().transData.inverted())
     bbox_props = get_bbox_properties(bbox)
     
     attempts = 0
     while attempts < max_attempts:
-        # Generate random movement within the range [-padding, padding]
         dx = np.random.uniform(-padding, padding)
         dy = np.random.uniform(-padding, padding)
-        
         new_x = current_x + dx
         new_y = current_y + dy
-        
-        # Ensure the new position is within plot limits
         new_x, new_y = adjust_position(new_x, new_y)
         
-        # Compute new annotation bbox
         annotation.set_position((new_x, new_y))
         bbox = annotation.get_window_extent()
         bbox = bbox.transformed(plt.gca().transData.inverted())
         bbox_props = get_bbox_properties(bbox)
 
-        # Check for overlap with other annotations and data points
         overlap_found = False
         for artist in plt.gca().get_children():
             if isinstance(artist, plt.Line2D) or isinstance(artist, PathCollection):
-                # Check for overlap with data points
                 artist_bbox = artist.get_window_extent()
                 artist_bbox = artist_bbox.transformed(plt.gca().transData.inverted())
                 artist_bbox_props = get_bbox_properties(artist_bbox)
@@ -120,7 +111,6 @@ def adjust_annotation_position(annotation, x, y, padding=10, max_attempts=10000)
                     break
 
             if isinstance(artist, plt.Text):
-                # Check for overlap with other text annotations
                 artist_bbox = artist.get_window_extent()
                 artist_bbox = artist_bbox.transformed(plt.gca().transData.inverted())
                 artist_bbox_props = get_bbox_properties(artist_bbox)
@@ -129,7 +119,6 @@ def adjust_annotation_position(annotation, x, y, padding=10, max_attempts=10000)
                     break
 
             if isinstance(artist, Ellipse):
-                # Check for overlap with ellipses representing clusters
                 artist_bbox = artist.get_window_extent()
                 artist_bbox = artist_bbox.transformed(plt.gca().transData.inverted())
                 artist_bbox_props = get_bbox_properties(artist_bbox)
@@ -137,131 +126,103 @@ def adjust_annotation_position(annotation, x, y, padding=10, max_attempts=10000)
                     overlap_found = True
                     break
         
-        # If no overlap and within bounds, return the new position
         if not overlap_found and (
             bbox_props['left'] >= plt.xlim()[0] and
             bbox_props['right'] <= plt.xlim()[1] and
             bbox_props['bottom'] >= plt.ylim()[0] and
             bbox_props['top'] <= plt.ylim()[1]):
             return new_x, new_y
-        
-        # Update last valid position only if the new position is within bounds
+
         if bbox_props['left'] >= plt.xlim()[0] and \
            bbox_props['right'] <= plt.xlim()[1] and \
            bbox_props['bottom'] >= plt.ylim()[0] and \
            bbox_props['top'] <= plt.ylim()[1]:
             last_valid_x, last_valid_y = new_x, new_y
-        
-        # Increment attempt counter
+
         attempts += 1
 
-    # Return the last valid position if max_attempts reached
     return last_valid_x, last_valid_y
 
 def plot_scatter_with_clustering(df_metadata, graph_dir='graph'):
-    # Ensure the output directory exists
     os.makedirs(graph_dir, exist_ok=True)
     
-    # Filter data based on Fill Percentage
     df_filtered = df_metadata[(df_metadata['Fill Percentage'] >= 40) & (df_metadata['Fill Percentage'] <= 100)]
-    
     if df_filtered.empty:
         logging.info("No data to plot after filtering.")
         return
     
-    # Prepare data for clustering
     X = df_filtered[['Duplicate Percentage', 'Fill Percentage']].values
-    
-    # Apply DBSCAN clustering
     clustering = DBSCAN(eps=3, min_samples=2).fit(X)
     df_filtered['Cluster'] = clustering.labels_
 
-    # Plotting
-    plt.figure(figsize=(12, 8))
+    fig, ax = plt.subplots(figsize=(12, 8))
+    ax_invisible = fig.add_subplot(111, frameon=False)
+    ax_invisible.set_xticks([])
+    ax_invisible.set_yticks([])
+    ax_invisible.set_xlim(ax.get_xlim())
+    ax_invisible.set_ylim(ax.get_ylim())
     
-    # Define a color map for clusters
     unique_clusters = np.unique(df_filtered['Cluster'])
     num_clusters = len(unique_clusters)
     colors = plt.cm.get_cmap('tab10', num_clusters)
     
-    # Create a dictionary to keep track of field names for each cluster
     cluster_field_dict = {cluster: [] for cluster in unique_clusters if cluster != -1}
-    
     for index, row in df_filtered.iterrows():
         if row['Cluster'] != -1:
             cluster_field_dict[row['Cluster']].append(row['Column Name'])
     
-    # Plot each cluster
     for cluster in unique_clusters:
         if cluster == -1:
-            # Plot and annotate outliers
             outlier_data = df_filtered[df_filtered['Cluster'] == -1]
             for _, row in outlier_data.iterrows():
-                plt.scatter(row['Duplicate Percentage'], row['Fill Percentage'], 
-                            color='red', s=100, label='Outlier', edgecolor='black')
-                annot = plt.annotate(row['Column Name'], 
-                                     xy=(row['Duplicate Percentage'], row['Fill Percentage']),
-                                     xytext=(row['Duplicate Percentage'], row['Fill Percentage'] - 2),
-                                     fontsize=8, color='red',
-                                     bbox=dict(boxstyle="round,pad=0.3", edgecolor='red', facecolor='none'),
-                                     arrowprops=dict(arrowstyle="->", color='red'))
-                
-                # Adjust annotation position to avoid overlap
+                ax.scatter(row['Duplicate Percentage'], row['Fill Percentage'], 
+                           color='red', s=100, label='Outlier', edgecolor='black')
+                annot = ax_invisible.annotate(row['Column Name'], 
+                                              xy=(row['Duplicate Percentage'], row['Fill Percentage']),
+                                              xytext=(row['Duplicate Percentage'], row['Fill Percentage'] - 2),
+                                              fontsize=8, color='red',
+                                              bbox=dict(boxstyle="round,pad=0.3", edgecolor='red', facecolor='none'),
+                                              arrowprops=dict(arrowstyle="->", color='red'))
                 new_x, new_y = adjust_annotation_position(annot, row['Duplicate Percentage'], row['Fill Percentage'])
                 annot.set_position((new_x, new_y))
         else:
             cluster_data = df_filtered[df_filtered['Cluster'] == cluster]
+            ax.scatter(cluster_data['Duplicate Percentage'], cluster_data['Fill Percentage'], 
+                       label=f'Cluster {cluster}', alpha=0.6, color=colors(cluster), s=100)
             
-            # Plot the data points
-            plt.scatter(cluster_data['Duplicate Percentage'], cluster_data['Fill Percentage'], 
-                        label=f'Cluster {cluster}', alpha=0.6, color=colors(cluster), s=100)
-            
-            # Plot an ellipse to show cluster range
             mean_dup = cluster_data['Duplicate Percentage'].mean()
             mean_fill = cluster_data['Fill Percentage'].mean()
             std_dup = cluster_data['Duplicate Percentage'].std()
             std_fill = cluster_data['Fill Percentage'].std()
             
-            ellipse = Ellipse(xy=(mean_dup, mean_fill), 
-                              width=2*std_dup, height=2*std_fill, 
+            ellipse = Ellipse(xy=(mean_dup, mean_fill), width=2*std_dup, height=2*std_fill, 
                               edgecolor=colors(cluster), facecolor='none', linestyle='--')
-            plt.gca().add_patch(ellipse)
+            ax.add_patch(ellipse)
             
-            # Annotate the plot with the field names for each cluster
             field_names = cluster_field_dict[cluster]
             field_lines = [", ".join(field_names[i:i+2]) for i in range(0, len(field_names), 2)]
             field_text = "\n".join(field_lines)
             
-            # Compute annotation position (left of the ellipse)
-            annot_x = mean_dup
-            annot_y = mean_fill
+            annot_x, annot_y = adjust_position(mean_dup, mean_fill)
+            annot = ax_invisible.annotate(field_text, xy=(mean_dup, mean_fill), xytext=(annot_x, annot_y),
+                                          fontsize=8, color=colors(cluster),
+                                          bbox=dict(boxstyle="round,pad=0.3", edgecolor=colors(cluster), facecolor='none'),
+                                          arrowprops=dict(arrowstyle="->", color=colors(cluster), connectionstyle="arc3,rad=0"))
             
-            # Ensure annotations are within plot limits
-            annot_x, annot_y = adjust_position(annot_x, annot_y)
-            
-            # Add annotation and arrow in one go
-            annot = plt.annotate(field_text, xy=(mean_dup, mean_fill), xytext=(annot_x, annot_y),
-                                 fontsize=8, color=colors(cluster),
-                                 bbox=dict(boxstyle="round,pad=0.3", edgecolor=colors(cluster), facecolor='none'),
-                                 arrowprops=dict(arrowstyle="->", color=colors(cluster), 
-                                                 connectionstyle="arc3,rad=0"))
-            
-            # Adjust annotation position to avoid overlap
             new_x, new_y = adjust_annotation_position(annot, mean_dup, mean_fill)
             annot.set_position((new_x, new_y))
 
-    plt.xlabel('Duplicate Percentage')
-    plt.ylabel('Fill Percentage')
-    plt.title('Scatter Plot with DBSCAN Clustering')
-    plt.grid(True)
+    ax.set_xlabel('Duplicate Percentage')
+    ax.set_ylabel('Fill Percentage')
+    ax.set_title('Scatter Plot with DBSCAN Clustering')
+    ax.grid(True)
     
-    # Save plot
     output_path = os.path.join(graph_dir, 'scatter_with_clustering.png')
     plt.savefig(output_path, bbox_inches='tight')
     plt.close()
     
     logging.info(f"Scatter plot with clustering saved as '{output_path}'.")
-
+    
 def remove_url_column(df):
     if 'url' in df.columns:
         df.drop(columns=['url'], inplace=True)
