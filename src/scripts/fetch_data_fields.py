@@ -4,14 +4,12 @@ from datetime import datetime
 import pandas as pd
 import hashlib
 
-DATA_DIR = 'data'
+DATA_DIR = os.path.join('data')
 HISTORY_DIR = os.path.join(DATA_DIR, 'history')
 DIFF_DIR = os.path.join(DATA_DIR, 'diffs')
 LATEST_FILE_PATH = os.path.join(DATA_DIR, 'data_fields.txt')
 DATA_FIELDS_URL = 'https://world.openfoodfacts.org/data/data-fields.txt'
 
-os.makedirs(HISTORY_DIR, exist_ok=True)
-os.makedirs(DIFF_DIR, exist_ok=True)
 
 def fetch_data(url):
     response = requests.get(url)
@@ -71,7 +69,16 @@ def save_diff(added_lines, removed_lines, version1, version2, format='csv'):
     
     print(f"Diff saved to {diff_filepath}")
 
-def fetch_and_compare_data_fields():
+def fetch_and_compare_data_fields(data_directory):
+    DATA_DIR = data_directory
+    
+    os.makedirs(HISTORY_DIR, exist_ok=True)
+    os.makedirs(DIFF_DIR, exist_ok=True)
+
+    # Debugging: Print to confirm directory creation
+    print(f"Created HISTORY_DIR: {os.path.exists(HISTORY_DIR)}")
+    print(f"Created DIFF_DIR: {os.path.exists(DIFF_DIR)}")
+    
     latest_data = fetch_data(DATA_FIELDS_URL)
     previous_data = load_data(LATEST_FILE_PATH)
     
@@ -90,4 +97,4 @@ def fetch_and_compare_data_fields():
     save_data(latest_data, LATEST_FILE_PATH)
 
 if __name__ == "__main__":
-    fetch_and_compare_data_fields()
+    fetch_and_compare_data_fields(data_directory=DATA_DIR)

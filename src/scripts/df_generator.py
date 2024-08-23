@@ -153,7 +153,6 @@ def load_or_cache_dataframes(dataset_directory, cache_directory='data/cache', fi
         save_nullity_matrix(dfs[file_name], file_name)
 
     # Update the cache hashes
-    os.makedirs(cache_directory, exist_ok=True)
     with open(hash_file_path, 'w') as f:
         json.dump(new_hashes, f)
 

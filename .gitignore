@@ -3,5 +3,5 @@ src/scripts/__pycache__/
 src/logs/
 src/graph/
 src/data/
-src/Dataset/
+src/dataset/
 src/temp/
