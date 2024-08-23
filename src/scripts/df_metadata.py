@@ -35,7 +35,7 @@ def analyze_column(col):
         bad_null_percentage = bad_null_count / col.size * 100
 
         # Calculate duplicate percentage
-        duplicate_percentage = col.duplicated().mean() * 100
+        duplicate_percentage = col.dropna().duplicated().mean() * 100
 
     # Calculate missing percentage using missingno
     missing_percentage = col.isna().mean() * 100
