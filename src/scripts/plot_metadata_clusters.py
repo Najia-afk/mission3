@@ -2,11 +2,12 @@ import pandas as pd
 import logging
 import numpy as np
 from sklearn.cluster import DBSCAN
-import os
 from dash import Dash, dcc, html
 from dash.dependencies import Input, Output
 import plotly.express as px
+import plotly.graph_objs as go
 import threading
+import random
 
 logging.basicConfig(level=logging.INFO)
 
@@ -29,17 +30,10 @@ def apply_clustering(df_filtered, eps=3, min_samples=2):
 def create_layout():
     """Create the layout of the Dash app."""
     layout = html.Div([
-        # Outer container to hold everything together with a white background
         html.Div([
-            # Title
             html.H1("Clustering of Data Based on Fill and Duplicate Percentages", style={'text-align': 'center'}),
-            
-            # Inner container for the graph and controls
             html.Div([
-                # Graph
                 dcc.Graph(id='graph', config={'displayModeBar': True}, style={'width': '100%', 'height': '600px'}),
-                
-                # Controls
                 html.Div([
                     html.Div([
                         html.Label('Min Fill Percentage (%)', style={'font-weight': 'bold'}),
@@ -50,7 +44,7 @@ def create_layout():
                             min=0,
                             max=100,
                             step=1,
-                            style={'width': '45px'},  # Slightly increased input field width
+                            style={'width': '45px'},
                         ),
                     ], style={'padding': 10}),
                     html.Div([
@@ -62,7 +56,7 @@ def create_layout():
                             min=0,
                             max=100,
                             step=1,
-                            style={'width': '45px'},  # Slightly increased input field width
+                            style={'width': '45px'},
                         ),
                     ], style={'padding': 10}),
                     html.Div([
@@ -74,7 +68,7 @@ def create_layout():
                             min=0.1,
                             max=10,
                             step=0.1,
-                            style={'width': '30px'},  # Slightly increased input field width
+                            style={'width': '30px'},
                         ),
                     ], style={'padding': 10}),
                     html.Div([
@@ -86,32 +80,116 @@ def create_layout():
                             min=1,
                             max=20,
                             step=1,
-                            style={'width': '30px'},  # Slightly increased input field width
+                            style={'width': '30px'},
                         ),
                     ], style={'padding': 10}),
                 ], style={'width': '20%', 'display': 'inline-block', 'vertical-align': 'top'})
-                
             ], style={'display': 'flex', 'justify-content': 'space-between'}),
         ], style={'background-color': 'white', 'padding': '20px', 'border-radius': '10px'})
     ], style={'width': '100%', 'margin': '0 auto'})
     
     return layout
 
-
 def update_graph(min_fill, max_fill, eps, min_samples):
     """Update the graph based on user input."""
+    # Filter and cluster the data
     filtered_metadata = filter_metadata_and_dataframes(combined_metadata, min_fill=min_fill, max_fill=max_fill)
     clustered_data = apply_clustering(filtered_metadata, eps=eps, min_samples=min_samples)
 
+    # Create the scatter plot
     fig = px.scatter(clustered_data, x='Fill Percentage', y='Duplicate Percentage', color='Cluster',
                      labels={'Fill Percentage': 'Fill %', 'Duplicate Percentage': 'Duplicate %'},
                      template='plotly_white')
 
-    # Remove legend and replace it with circles on the graph
-    # fig.update_traces(marker=dict(size=12, line=dict(width=2, color='DarkSlateGrey')))
-    # fig.update_layout(showlegend=False)
+    # Initialize variables for annotation management
+    annotation_positions = []  # Track positions to avoid overlaps
+
+    def is_position_valid(x, y, ax_offset, ay_offset, text):
+        """Check if a proposed annotation position is valid (no overlap)."""
+        # Estimate the height of the annotation by counting the number of lines
+        num_lines = text.count("<br>") + 1
+        adjusted_distance = 10 * num_lines  # Adjust the distance based on the number of lines
+
+        for pos in annotation_positions:
+            if abs(pos[0] - (x + ax_offset)) < 50 and abs(pos[1] - (y + ay_offset)) < adjusted_distance:
+                return False
+        return True
+
+    def add_annotation(x, y, text, color, is_isolated=False):
+        """Add an annotation to the figure and update annotation positions."""
+        # Generate positions dynamically with rotation
+        positions = [(dx, dy) for dx in range(20, 2000, 5) for dy in range(20, 2000, 5)]
+        rotations = [(dx, dy) for dx, dy in [(1, 1), (1, -1), (-1, 1), (-1, -1)]]
+        random.shuffle(rotations)
+
+        for offset in positions:
+            for rotation in rotations:
+                ax_offset, ay_offset = offset[0] * rotation[0], offset[1] * rotation[1]
+                if is_position_valid(x, y, ax_offset, ay_offset, text):
+                    fig.add_annotation(
+                        x=x,
+                        y=y,
+                        text=text,
+                        showarrow=True,
+                        arrowhead=2,
+                        ax=ax_offset,
+                        ay=ay_offset,
+                        arrowcolor=color,
+                        font=dict(size=10, color=color),
+                        bordercolor=color,
+                        borderwidth=1,
+                        bgcolor="rgba(255,255,255,0.8)"
+                    )
+                    annotation_positions.append((x + ax_offset, y + ay_offset))
+                    return  # Exit once a valid position is found
+
+    # Handle isolated points (Cluster -1)
+    for index, row in clustered_data[clustered_data['Cluster'] == -1].iterrows():
+        x = row['Fill Percentage']
+        y = row['Duplicate Percentage']
+        field_text = row['Column Name']
+
+        # Use dark blue for isolated points
+        color = "DarkBlue"
+
+        # Add the annotation near the point with a short arrow
+        add_annotation(x, y, field_text, color)
+
+    # Handle clustered points, ordered by cluster size (ascending)
+    cluster_sizes = clustered_data[clustered_data['Cluster'] != -1]['Cluster'].value_counts().sort_values().index
+    for cluster in cluster_sizes:
+        cluster_data = clustered_data[clustered_data['Cluster'] == cluster]
+        mean_x = cluster_data['Fill Percentage'].mean()
+        mean_y = cluster_data['Duplicate Percentage'].mean()
+
+        # Prepare text for annotation (concatenate column names)
+        field_names = cluster_data['Column Name'].tolist()
+        field_text_lines = [", ".join(field_names[i:i+2]) for i in range(0, len(field_names), 2)]
+        field_text = "<br>".join(field_text_lines)  # Use <br> for new lines in Plotly
+
+        # Set color based on the cluster
+        color = px.colors.qualitative.Plotly[cluster % len(px.colors.qualitative.Plotly)]
+
+        # Add the annotation with the calculated offsets
+        add_annotation(mean_x, mean_y, field_text, color)
+
+    # Customize legend and layout
+    fig.update_layout(legend=dict(
+        x=1,
+        y=1,
+        traceorder="normal",
+        font=dict(
+            family="sans-serif",
+            size=12,
+            color="black"
+        ),
+        bgcolor="LightSteelBlue",
+        bordercolor="Black",
+        borderwidth=2
+    ))
 
     return fig
+
 
 def start_dash_server():
     """Start the Dash server."""
@@ -141,11 +219,9 @@ def run_dash_app(metadata):
     global combined_metadata, server_thread
     combined_metadata = metadata
     
-    # If there's an existing server thread, stop it
     if server_thread and server_thread.is_alive():
         server_thread.join(timeout=1)
     
-    # Start the Dash server in a new thread
     server_thread = threading.Thread(target=start_dash_server)
     server_thread.start()
 
