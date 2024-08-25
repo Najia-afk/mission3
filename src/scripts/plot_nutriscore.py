@@ -99,9 +99,9 @@ def create_layout():
                     dcc.Checklist(
                         id='display-options',
                         options=[
-                            {'label': 'Show Bubbles', 'value': 'show_bubbles'},
-                            {'label': 'Show Regression Lines', 'value': 'show_regression'},
-                            {'label': 'Show Combination Dots', 'value': 'show_combination_dots'}
+                            {'label': 'Bubbles', 'value': 'show_bubbles'},
+                            {'label': 'Regression Lines', 'value': 'show_regression'},
+                            {'label': 'Combination Dots', 'value': 'show_combination_dots'}
                         ],
                         value=['show_bubbles'],  # Default is to show regression lines and bubbles
                         style={'margin-bottom': '20px'}

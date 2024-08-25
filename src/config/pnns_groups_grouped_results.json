@@ -1,0 +1,626 @@
+{
+    "nan ": {
+        "combinations": [
+            {
+                "combination": [
+                    NaN,
+                    NaN
+                ],
+                "combination_percentage": 70.53499892445295,
+                "frequency": "226253",
+                "fuzzy_score": 100
+            },
+            {
+                "combination": [
+                    NaN,
+                    NaN
+                ],
+                "combination_percentage": 0.007170313654459467,
+                "frequency": "23",
+                "fuzzy_score": 73
+            }
+        ],
+        "total_percentage": 70.5421692381074,
+        "total_frequency": "226276"
+    },
+    "unknown ": {
+        "combinations": [
+            {
+                "combination": [
+                    "unknown",
+                    "unknown"
+                ],
+                "combination_percentage": 7.053094613847434,
+                "frequency": "22624",
+                "fuzzy_score": 100
+            }
+        ],
+        "total_percentage": 7.053094613847434,
+        "total_frequency": "22624"
+    },
+    "One-dish meals ": {
+        "combinations": [
+            {
+                "combination": [
+                    "Composite foods",
+                    "One-dish meals"
+                ],
+                "combination_percentage": 1.7289808490274874,
+                "frequency": "5546",
+                "fuzzy_score": 100
+            }
+        ],
+        "total_percentage": 1.7289808490274874,
+        "total_frequency": "5546"
+    },
+    "Sweets ": {
+        "combinations": [
+            {
+                "combination": [
+                    "Sugary snacks",
+                    "Sweets"
+                ],
+                "combination_percentage": 1.4646145021152424,
+                "frequency": "4698",
+                "fuzzy_score": 100
+            }
+        ],
+        "total_percentage": 1.4646145021152424,
+        "total_frequency": "4698"
+    },
+    "Biscuits and cakes ": {
+        "combinations": [
+            {
+                "combination": [
+                    "Sugary snacks",
+                    "Biscuits and cakes"
+                ],
+                "combination_percentage": 1.421904372956071,
+                "frequency": "4561",
+                "fuzzy_score": 100
+            }
+        ],
+        "total_percentage": 1.421904372956071,
+        "total_frequency": "4561"
+    },
+    "Non-sugared beverages ": {
+        "combinations": [
+            {
+                "combination": [
+                    "Beverages",
+                    "Non-sugared beverages"
+                ],
+                "combination_percentage": 1.3411604061515057,
+                "frequency": "4302",
+                "fuzzy_score": 100
+            }
+        ],
+        "total_percentage": 1.3411604061515057,
+        "total_frequency": "4302"
+    },
+    "Cereals ": {
+        "combinations": [
+            {
+                "combination": [
+                    "Cereals and potatoes",
+                    "Cereals"
+                ],
+                "combination_percentage": 1.2800568637048075,
+                "frequency": "4106",
+                "fuzzy_score": 100
+            },
+            {
+                "combination": [
+                    "cereals-and-potatoes",
+                    "cereals"
+                ],
+                "combination_percentage": 0.003741033211022331,
+                "frequency": "12",
+                "fuzzy_score": 39
+            }
+        ],
+        "total_percentage": 1.28379789691583,
+        "total_frequency": "4118"
+    },
+    "Cheese ": {
+        "combinations": [
+            {
+                "combination": [
+                    "Milk and dairy products",
+                    "Cheese"
+                ],
+                "combination_percentage": 1.2544931367628216,
+                "frequency": "4024",
+                "fuzzy_score": 100
+            }
+        ],
+        "total_percentage": 1.2544931367628216,
+        "total_frequency": "4024"
+    },
+    "Dressings and sauces ": {
+        "combinations": [
+            {
+                "combination": [
+                    "Fat and sauces",
+                    "Dressings and sauces"
+                ],
+                "combination_percentage": 1.1229334688418695,
+                "frequency": "3602",
+                "fuzzy_score": 100
+            }
+        ],
+        "total_percentage": 1.1229334688418695,
+        "total_frequency": "3602"
+    },
+    "Milk and yogurt ": {
+        "combinations": [
+            {
+                "combination": [
+                    "Milk and dairy products",
+                    "Milk and yogurt"
+                ],
+                "combination_percentage": 1.0278488747283854,
+                "frequency": "3297",
+                "fuzzy_score": 100
+            }
+        ],
+        "total_percentage": 1.0278488747283854,
+        "total_frequency": "3297"
+    },
+    "Processed meat ": {
+        "combinations": [
+            {
+                "combination": [
+                    "Fish Meat Eggs",
+                    "Processed meat"
+                ],
+                "combination_percentage": 1.0122612363491257,
+                "frequency": "3247",
+                "fuzzy_score": 100
+            }
+        ],
+        "total_percentage": 1.0122612363491257,
+        "total_frequency": "3247"
+    },
+    "Chocolate products ": {
+        "combinations": [
+            {
+                "combination": [
+                    "Sugary snacks",
+                    "Chocolate products"
+                ],
+                "combination_percentage": 0.969239354422369,
+                "frequency": "3109",
+                "fuzzy_score": 100
+            }
+        ],
+        "total_percentage": 0.969239354422369,
+        "total_frequency": "3109"
+    },
+    "Alcoholic beverages ": {
+        "combinations": [
+            {
+                "combination": [
+                    NaN,
+                    "Alcoholic beverages"
+                ],
+                "combination_percentage": 0.9068888009053301,
+                "frequency": "2909",
+                "fuzzy_score": 100
+            }
+        ],
+        "total_percentage": 0.9068888009053301,
+        "total_frequency": "2909"
+    },
+    "Vegetables ": {
+        "combinations": [
+            {
+                "combination": [
+                    "Fruits and vegetables",
+                    "Vegetables"
+                ],
+                "combination_percentage": 0.8853778599419517,
+                "frequency": "2840",
+                "fuzzy_score": 100
+            },
+            {
+                "combination": [
+                    "fruits-and-vegetables",
+                    "vegetables"
+                ],
+                "combination_percentage": 0.29117708492457145,
+                "frequency": "934",
+                "fuzzy_score": 47
+            }
+        ],
+        "total_percentage": 1.1765549448665231,
+        "total_frequency": "3774"
+    },
+    "Fish and seafood ": {
+        "combinations": [
+            {
+                "combination": [
+                    "Fish Meat Eggs",
+                    "Fish and seafood"
+                ],
+                "combination_percentage": 0.8224038008897424,
+                "frequency": "2638",
+                "fuzzy_score": 100
+            }
+        ],
+        "total_percentage": 0.8224038008897424,
+        "total_frequency": "2638"
+    },
+    "Sweetened beverages ": {
+        "combinations": [
+            {
+                "combination": [
+                    "Beverages",
+                    "Sweetened beverages"
+                ],
+                "combination_percentage": 0.6765035056598715,
+                "frequency": "2170",
+                "fuzzy_score": 100
+            }
+        ],
+        "total_percentage": 0.6765035056598715,
+        "total_frequency": "2170"
+    },
+    "Appetizers ": {
+        "combinations": [
+            {
+                "combination": [
+                    "Salty snacks",
+                    "Appetizers"
+                ],
+                "combination_percentage": 0.6549925646964931,
+                "frequency": "2101",
+                "fuzzy_score": 100
+            }
+        ],
+        "total_percentage": 0.6549925646964931,
+        "total_frequency": "2101"
+    },
+    "Fruits ": {
+        "combinations": [
+            {
+                "combination": [
+                    "Fruits and vegetables",
+                    "Fruits"
+                ],
+                "combination_percentage": 0.6447047233661817,
+                "frequency": "2068",
+                "fuzzy_score": 100
+            },
+            {
+                "combination": [
+                    "fruits-and-vegetables",
+                    "fruits"
+                ],
+                "combination_percentage": 0.016522896682015294,
+                "frequency": "53",
+                "fuzzy_score": 34
+            }
+        ],
+        "total_percentage": 0.661227620048197,
+        "total_frequency": "2121"
+    },
+    "Fruit juices ": {
+        "combinations": [
+            {
+                "combination": [
+                    "Beverages",
+                    "Fruit juices"
+                ],
+                "combination_percentage": 0.5998123248339137,
+                "frequency": "1924",
+                "fuzzy_score": 100
+            }
+        ],
+        "total_percentage": 0.5998123248339137,
+        "total_frequency": "1924"
+    },
+    "Bread ": {
+        "combinations": [
+            {
+                "combination": [
+                    "Cereals and potatoes",
+                    "Bread"
+                ],
+                "combination_percentage": 0.5730015868215871,
+                "frequency": "1838",
+                "fuzzy_score": 100
+            }
+        ],
+        "total_percentage": 0.5730015868215871,
+        "total_frequency": "1838"
+    },
+    "Meat ": {
+        "combinations": [
+            {
+                "combination": [
+                    "Fish Meat Eggs",
+                    "Meat"
+                ],
+                "combination_percentage": 0.5281091882893191,
+                "frequency": "1694",
+                "fuzzy_score": 100
+            }
+        ],
+        "total_percentage": 0.5281091882893191,
+        "total_frequency": "1694"
+    },
+    "Fats ": {
+        "combinations": [
+            {
+                "combination": [
+                    "Fat and sauces",
+                    "Fats"
+                ],
+                "combination_percentage": 0.5031689668825035,
+                "frequency": "1614",
+                "fuzzy_score": 100
+            }
+        ],
+        "total_percentage": 0.5031689668825035,
+        "total_frequency": "1614"
+    },
+    "Breakfast cereals ": {
+        "combinations": [
+            {
+                "combination": [
+                    "Cereals and potatoes",
+                    "Breakfast cereals"
+                ],
+                "combination_percentage": 0.4389478967599535,
+                "frequency": "1408",
+                "fuzzy_score": 100
+            }
+        ],
+        "total_percentage": 0.4389478967599535,
+        "total_frequency": "1408"
+    },
+    "Legumes ": {
+        "combinations": [
+            {
+                "combination": [
+                    "Cereals and potatoes",
+                    "Legumes"
+                ],
+                "combination_percentage": 0.28837131001630467,
+                "frequency": "925",
+                "fuzzy_score": 100
+            },
+            {
+                "combination": [
+                    "cereals-and-potatoes",
+                    "legumes"
+                ],
+                "combination_percentage": 0.001247011070340777,
+                "frequency": "4",
+                "fuzzy_score": 33
+            }
+        ],
+        "total_percentage": 0.2896183210866454,
+        "total_frequency": "929"
+    },
+    "Dairy desserts ": {
+        "combinations": [
+            {
+                "combination": [
+                    "Milk and dairy products",
+                    "Dairy desserts"
+                ],
+                "combination_percentage": 0.2441024170192071,
+                "frequency": "783",
+                "fuzzy_score": 100
+            }
+        ],
+        "total_percentage": 0.2441024170192071,
+        "total_frequency": "783"
+    },
+    "Ice cream ": {
+        "combinations": [
+            {
+                "combination": [
+                    "Milk and dairy products",
+                    "Ice cream"
+                ],
+                "combination_percentage": 0.22477374542892503,
+                "frequency": "721",
+                "fuzzy_score": 100
+            }
+        ],
+        "total_percentage": 0.22477374542892503,
+        "total_frequency": "721"
+    },
+    "Nuts ": {
+        "combinations": [
+            {
+                "combination": [
+                    "Salty snacks",
+                    "Nuts"
+                ],
+                "combination_percentage": 0.21479765686619884,
+                "frequency": "689",
+                "fuzzy_score": 100
+            },
+            {
+                "combination": [
+                    "salty-snacks",
+                    "nuts"
+                ],
+                "combination_percentage": 0.00031175276758519424,
+                "frequency": "1",
+                "fuzzy_score": 27
+            }
+        ],
+        "total_percentage": 0.21510940963378403,
+        "total_frequency": "690"
+    },
+    "Sandwich ": {
+        "combinations": [
+            {
+                "combination": [
+                    "Composite foods",
+                    "Sandwich"
+                ],
+                "combination_percentage": 0.21386239856344327,
+                "frequency": "686",
+                "fuzzy_score": 100
+            }
+        ],
+        "total_percentage": 0.21386239856344327,
+        "total_frequency": "686"
+    },
+    "Pizza pies and quiche ": {
+        "combinations": [
+            {
+                "combination": [
+                    "Composite foods",
+                    "Pizza pies and quiche"
+                ],
+                "combination_percentage": 0.16055267530637504,
+                "frequency": "515",
+                "fuzzy_score": 100
+            }
+        ],
+        "total_percentage": 0.16055267530637504,
+        "total_frequency": "515"
+    },
+    "Soups ": {
+        "combinations": [
+            {
+                "combination": [
+                    "Fruits and vegetables",
+                    "Soups"
+                ],
+                "combination_percentage": 0.1568116420953527,
+                "frequency": "503",
+                "fuzzy_score": 100
+            }
+        ],
+        "total_percentage": 0.1568116420953527,
+        "total_frequency": "503"
+    },
+    "Dried fruits ": {
+        "combinations": [
+            {
+                "combination": [
+                    "Fruits and vegetables",
+                    "Dried fruits"
+                ],
+                "combination_percentage": 0.15494112548984154,
+                "frequency": "497",
+                "fuzzy_score": 100
+            }
+        ],
+        "total_percentage": 0.15494112548984154,
+        "total_frequency": "497"
+    },
+    "pastries ": {
+        "combinations": [
+            {
+                "combination": [
+                    "sugary-snacks",
+                    "pastries"
+                ],
+                "combination_percentage": 0.15462937272225635,
+                "frequency": "496",
+                "fuzzy_score": 100
+            }
+        ],
+        "total_percentage": 0.15462937272225635,
+        "total_frequency": "496"
+    },
+    "Eggs ": {
+        "combinations": [
+            {
+                "combination": [
+                    "Fish Meat Eggs",
+                    "Eggs"
+                ],
+                "combination_percentage": 0.14402977862435976,
+                "frequency": "462",
+                "fuzzy_score": 100
+            }
+        ],
+        "total_percentage": 0.14402977862435976,
+        "total_frequency": "462"
+    },
+    "Fruit nectars ": {
+        "combinations": [
+            {
+                "combination": [
+                    "Beverages",
+                    "Fruit nectars"
+                ],
+                "combination_percentage": 0.11721904061203303,
+                "frequency": "376",
+                "fuzzy_score": 100
+            }
+        ],
+        "total_percentage": 0.11721904061203303,
+        "total_frequency": "376"
+    },
+    "Artificially sweetened beverages ": {
+        "combinations": [
+            {
+                "combination": [
+                    "Beverages",
+                    "Artificially sweetened beverages"
+                ],
+                "combination_percentage": 0.0813674723397357,
+                "frequency": "261",
+                "fuzzy_score": 100
+            }
+        ],
+        "total_percentage": 0.0813674723397357,
+        "total_frequency": "261"
+    },
+    "Potatoes ": {
+        "combinations": [
+            {
+                "combination": [
+                    "Cereals and potatoes",
+                    "Potatoes"
+                ],
+                "combination_percentage": 0.05143920665155705,
+                "frequency": "165",
+                "fuzzy_score": 100
+            }
+        ],
+        "total_percentage": 0.05143920665155705,
+        "total_frequency": "165"
+    },
+    "Tripe dishes ": {
+        "combinations": [
+            {
+                "combination": [
+                    NaN,
+                    "Tripe dishes"
+                ],
+                "combination_percentage": 0.021510940963378404,
+                "frequency": "69",
+                "fuzzy_score": 100
+            }
+        ],
+        "total_percentage": 0.021510940963378404,
+        "total_frequency": "69"
+    },
+    "Salty and fatty products ": {
+        "combinations": [
+            {
+                "combination": [
+                    "Salty snacks",
+                    "Salty and fatty products"
+                ],
+                "combination_percentage": 0.00592330258411869,
+                "frequency": "19",
+                "fuzzy_score": 100
+            }
+        ],
+        "total_percentage": 0.00592330258411869,
+        "total_frequency": "19"
+    }
+}
