@@ -1,0 +1,203 @@
+{
+    "0.0 ": {
+        "combinations": [
+            {
+                "combination": [
+                    0.0,
+                    0.0
+                ],
+                "combination_percentage": 72.91616656326867,
+                "frequency": "233891",
+                "fuzzy_score": 100
+            },
+            {
+                "combination": [
+                    1.0,
+                    0.0
+                ],
+                "combination_percentage": 1.0315899079394077,
+                "frequency": "3309",
+                "fuzzy_score": 55
+            },
+            {
+                "combination": [
+                    2.0,
+                    0.0
+                ],
+                "combination_percentage": 0.01184660516823738,
+                "frequency": "38",
+                "fuzzy_score": 55
+            }
+        ],
+        "total_percentage": 73.95960307637631,
+        "total_frequency": "237238"
+    },
+    "nan ": {
+        "combinations": [
+            {
+                "combination": [
+                    NaN,
+                    NaN
+                ],
+                "combination_percentage": 22.39413655394726,
+                "frequency": "71833",
+                "fuzzy_score": 100
+            }
+        ],
+        "total_percentage": 22.39413655394726,
+        "total_frequency": "71833"
+    },
+    "1.0 ": {
+        "combinations": [
+            {
+                "combination": [
+                    0.0,
+                    1.0
+                ],
+                "combination_percentage": 2.7883167532819773,
+                "frequency": "8944",
+                "fuzzy_score": 100
+            },
+            {
+                "combination": [
+                    1.0,
+                    1.0
+                ],
+                "combination_percentage": 0.33638123622442456,
+                "frequency": "1079",
+                "fuzzy_score": 73
+            },
+            {
+                "combination": [
+                    2.0,
+                    1.0
+                ],
+                "combination_percentage": 0.004364538746192719,
+                "frequency": "14",
+                "fuzzy_score": 55
+            }
+        ],
+        "total_percentage": 3.129062528252595,
+        "total_frequency": "10037"
+    },
+    "2.0 ": {
+        "combinations": [
+            {
+                "combination": [
+                    0.0,
+                    2.0
+                ],
+                "combination_percentage": 0.31767607016931293,
+                "frequency": "1019",
+                "fuzzy_score": 100
+            },
+            {
+                "combination": [
+                    1.0,
+                    2.0
+                ],
+                "combination_percentage": 0.0922788192052175,
+                "frequency": "296",
+                "fuzzy_score": 55
+            },
+            {
+                "combination": [
+                    2.0,
+                    2.0
+                ],
+                "combination_percentage": 0.0018705166055111655,
+                "frequency": "6",
+                "fuzzy_score": 73
+            }
+        ],
+        "total_percentage": 0.4118254059800416,
+        "total_frequency": "1321"
+    },
+    "3.0 ": {
+        "combinations": [
+            {
+                "combination": [
+                    0.0,
+                    3.0
+                ],
+                "combination_percentage": 0.06765035056598714,
+                "frequency": "217",
+                "fuzzy_score": 100
+            },
+            {
+                "combination": [
+                    1.0,
+                    3.0
+                ],
+                "combination_percentage": 0.021510940963378404,
+                "frequency": "69",
+                "fuzzy_score": 55
+            }
+        ],
+        "total_percentage": 0.08916129152936556,
+        "total_frequency": "286"
+    },
+    "4.0 ": {
+        "combinations": [
+            {
+                "combination": [
+                    1.0,
+                    4.0
+                ],
+                "combination_percentage": 0.007170313654459467,
+                "frequency": "23",
+                "fuzzy_score": 100
+            },
+            {
+                "combination": [
+                    0.0,
+                    4.0
+                ],
+                "combination_percentage": 0.00654680811928908,
+                "frequency": "21",
+                "fuzzy_score": 55
+            },
+            {
+                "combination": [
+                    2.0,
+                    4.0
+                ],
+                "combination_percentage": 0.00031175276758519424,
+                "frequency": "1",
+                "fuzzy_score": 55
+            }
+        ],
+        "total_percentage": 0.01402887454133374,
+        "total_frequency": "45"
+    },
+    "5.0 ": {
+        "combinations": [
+            {
+                "combination": [
+                    0.0,
+                    5.0
+                ],
+                "combination_percentage": 0.0018705166055111655,
+                "frequency": "6",
+                "fuzzy_score": 100
+            }
+        ],
+        "total_percentage": 0.0018705166055111655,
+        "total_frequency": "6"
+    },
+    "6.0 ": {
+        "combinations": [
+            {
+                "combination": [
+                    0.0,
+                    6.0
+                ],
+                "combination_percentage": 0.00031175276758519424,
+                "frequency": "1",
+                "fuzzy_score": 100
+            }
+        ],
+        "total_percentage": 0.00031175276758519424,
+        "total_frequency": "1"
+    }
+}
