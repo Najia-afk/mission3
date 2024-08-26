@@ -141,19 +141,6 @@ def update_graph(frequency_threshold, display_options, df):
             ),
             showlegend=False
         ))
-    else:
-        # If bubbles are not shown, plot the points without size scaling
-        fig.add_trace(go.Scatter(
-            x=filtered_df['nutrition-score-fr_100g'],
-            y=filtered_df['nutrition-score-uk_100g'],
-            mode='markers',
-            name='Nutriscore Points',
-            marker=dict(
-                size=8,
-                color=filtered_df['Color']
-            ),
-            showlegend=False
-        ))
 
     # Conditionally perform and add regression lines
     if 'show_regression' in display_options:
