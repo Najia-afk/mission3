@@ -22,7 +22,7 @@ setup_logging('logs')
 
 # Define the max limits for each metric
 MAX_LIMITS = {
-    'energy_100g': 900,
+    'energy_100g': 4300,
     'fat_100g': 100,
     'saturated-fat_100g': 50,
     'carbohydrates_100g': 100,

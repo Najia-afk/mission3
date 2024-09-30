@@ -25,9 +25,9 @@ def filter_metadata_and_dataframes(combined_metadata, dfs, min_fill_percentage=4
             df = dfs[df_name]
             columns_to_keep = combined_metadata[combined_metadata['DataFrame'] == df_name]['Column Name'].tolist()
             dfs[df_name] = df[columns_to_keep]  # Filter the DataFrame
-            logging.info(f"Updated DataFrame '{df_name}' to retain only relevant columns.")
+            print(f"Updated DataFrame '{df_name}' to retain only relevant columns.")
         else:
-            logging.warning(f"DataFrame '{df_name}' not found in the provided DataFrames.")
+            print(f"DataFrame '{df_name}' not found in the provided DataFrames.")
     
     return combined_metadata, dfs
 
@@ -55,9 +55,9 @@ def check_datetime_consistency(df, timestamp_column, datetime_column, log_dir='l
                 discrepancies.append((idx, timestamp_date, datetime_date))
 
     if discrepancies:
-        logging.warning(f"Found {len(discrepancies)} discrepancies between '{timestamp_column}' and '{datetime_column}'. Please review the log before proceeding.")
+        print(f"Found {len(discrepancies)} discrepancies between '{timestamp_column}' and '{datetime_column}'. Please review the log before proceeding.")
     else:
-        logging.info(f"No significant discrepancies found, '{timestamp_column}' can been dropped.")
+        print(f"No significant discrepancies found, '{timestamp_column}' can been dropped.")
 
 def check_field_frequency(df, fields, temp_dir, generic_name):
     os.makedirs(temp_dir, exist_ok=True)
@@ -68,7 +68,7 @@ def check_field_frequency(df, fields, temp_dir, generic_name):
     combination_log_path = os.path.join(temp_dir, f'{generic_name}_combination_log.csv')
     combination_counts.to_csv(combination_log_path, header=['Frequency'])
     
-    logging.info(f"Check the {generic_name} combination file for more details about fields frequency.")
+    print(f"Check the {generic_name} combination file for more details about fields frequency.")
 
 def process_dataframe(df, log_dir='logs', temp_dir='temp', datetime_checks=None, field_checks=None):
     os.makedirs(log_dir, exist_ok=True)
