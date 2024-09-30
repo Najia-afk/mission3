@@ -1,6 +1,7 @@
 import os
 import pandas as pd
 import logging
+import numpy as np
 
 def setup_logging(log_dir):
     """Set up logging configuration."""
@@ -22,77 +23,69 @@ setup_logging('logs')
 
 # Define the max limits for each metric
 MAX_LIMITS = {
-    'energy_100g': 4300,
-    'fat_100g': 100,
-    'saturated-fat_100g': 50,
-    'carbohydrates_100g': 100,
-    'sugars_100g': 100,
-    'sodium_100g': 2.3,
-    'salt_100g': 5.75,
-    'trans-fat_100g': 55.33,
-    'cholesterol_100g': 55.08,
-    'fiber_100g': 99.49,
-    'proteins_100g': 99.04,
-    'vitamin-a_100g': 57.12,
-    'vitamin-c_100g': 56.09,
-    'calcium_100g': 56.03,
-    'iron_100g': 56.21,
-    # Add other limits if needed
+    'energy_100g': 950,
+    'fat_100g': 95,
+    'saturated-fat_100g': 55,
+    'carbohydrates_100g': 95,
+    'sugars_100g': 95,
+    'sodium_100g': 3.0,
+    'salt_100g': 6.0,
+    'trans-fat_100g': 5,
+    'cholesterol_100g': 500,
+    'fiber_100g': 50,
+    'proteins_100g': 90,
+    'vitamin-a_100g': 30,
+    'vitamin-c_100g': 50,
+    'calcium_100g': 30,
+    'iron_100g': 40,
 }
 
 # Define any multi-field dependency rules
 DEPENDENCY_RULES = [
     ('saturated-fat_100g', 'fat_100g'),
     ('sodium_100g', 'salt_100g')
-    # Add more dependencies if required
 ]
 
 def log_outliers(df, metric, max_limit):
-    """Log outlier information for a specific metric."""
+    """Log outlier information for a specific metric and replace outliers with NaN."""
     outliers = df[df[metric] > max_limit]
     for index, row in outliers.iterrows():
         logging.warning(f"Outlier detected in '{metric}': {row[metric]} exceeds the maximum limit of {max_limit}. "
                         f"Row details: {row.to_dict()}")
+        # Set the outlier value to NaN instead of dropping the row
+        df.at[index, metric] = np.nan
     return outliers
 
 def log_dependency_violations(df, field_1, field_2):
-    """Log and remove rows where field_1 exceeds field_2."""
+    """Log dependency violations and set field_1 values to NaN if they exceed field_2."""
     violations = df[df[field_1] > df[field_2]]
     for index, row in violations.iterrows():
         logging.warning(f"Dependency violation: '{field_1}' ({row[field_1]}) > '{field_2}' ({row[field_2]}). "
                         f"Row details: {row.to_dict()}")
+        # Set the violating value in field_1 to NaN instead of dropping the row
+        df.at[index, field_1] = np.nan
     return violations
 
 def apply_integrity_checks(df, max_limits, dependency_rules):
-    """Apply integrity checks on the DataFrame and remove rows with outliers."""
+    """Apply integrity checks on the DataFrame and replace outliers with NaN."""
     total_rows_before = len(df)
 
     # Single-field integrity checks
     for metric, max_limit in max_limits.items():
         if metric in df.columns:
             logging.info(f"Checking metric '{metric}' against max limit of {max_limit}...")
-            outliers = log_outliers(df, metric, max_limit)
-            if not outliers.empty:
-                logging.info(f"Removing {len(outliers)} rows with '{metric}' values exceeding {max_limit}.")
-                df = df[df[metric] <= max_limit]
-            else:
-                logging.info(f"No outliers found for '{metric}'.")
+            log_outliers(df, metric, max_limit)
 
     # Multi-field dependency checks
     for field_1, field_2 in dependency_rules:
         if field_1 in df.columns and field_2 in df.columns:
             logging.info(f"Checking dependency: '{field_1}' should not exceed '{field_2}'...")
-            violations = log_dependency_violations(df, field_1, field_2)
-            if not violations.empty:
-                logging.info(f"Removing {len(violations)} rows due to '{field_1}' > '{field_2}'.")
-                df = df[df[field_1] <= df[field_2]]
-            else:
-                logging.info(f"No dependency violations found between '{field_1}' and '{field_2}'.")
+            log_dependency_violations(df, field_1, field_2)
 
     total_rows_after = len(df)
     rows_removed = total_rows_before - total_rows_after
-    logging.info(f"Integrity check complete. Total rows removed: {rows_removed}. "
-                 f"DataFrame now contains {total_rows_after} rows.")
+    logging.info(f"Integrity check complete. Rows retained: {total_rows_after}. "
+                 f"Values replaced with NaN due to violations or outliers.")
 
     return df
 
