@@ -111,8 +111,8 @@
             },
             {
                 "combination": [
-                    "cereals-and-potatoes",
-                    "cereals"
+                    "Cereals and potatoes",
+                    "Cereals"
                 ],
                 "combination_percentage": 0.003741033211022331,
                 "frequency": "12",
@@ -225,8 +225,8 @@
             },
             {
                 "combination": [
-                    "fruits-and-vegetables",
-                    "vegetables"
+                    "Fruits and vegetables",
+                    "Vegetables"
                 ],
                 "combination_percentage": 0.29117708492457145,
                 "frequency": "934",
@@ -294,8 +294,8 @@
             },
             {
                 "combination": [
-                    "fruits-and-vegetables",
-                    "fruits"
+                    "Fruits and vegetables",
+                    "Fruits"
                 ],
                 "combination_percentage": 0.016522896682015294,
                 "frequency": "53",
@@ -393,8 +393,8 @@
             },
             {
                 "combination": [
-                    "cereals-and-potatoes",
-                    "legumes"
+                    "Cereals and potatoes",
+                    "Legumes"
                 ],
                 "combination_percentage": 0.001247011070340777,
                 "frequency": "4",
@@ -447,8 +447,8 @@
             },
             {
                 "combination": [
-                    "salty-snacks",
-                    "nuts"
+                    "Salty snacks",
+                    "Nuts"
                 ],
                 "combination_percentage": 0.00031175276758519424,
                 "frequency": "1",

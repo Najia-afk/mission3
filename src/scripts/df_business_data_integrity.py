@@ -54,7 +54,7 @@ def log_outliers(df, metric, max_limit):
                         f"Row details: {row.to_dict()}")
         # Set the outlier value to NaN instead of dropping the row
         df.at[index, metric] = np.nan
-    return outliers
+    return df
 
 def log_dependency_violations(df, field_1, field_2):
     """Log dependency violations and set field_1 values to NaN if they exceed field_2."""
@@ -64,7 +64,7 @@ def log_dependency_violations(df, field_1, field_2):
                         f"Row details: {row.to_dict()}")
         # Set the violating value in field_1 to NaN instead of dropping the row
         df.at[index, field_1] = np.nan
-    return violations
+    return df
 
 def apply_integrity_checks(df, max_limits, dependency_rules):
     """Apply integrity checks on the DataFrame and replace outliers with NaN."""
@@ -74,13 +74,13 @@ def apply_integrity_checks(df, max_limits, dependency_rules):
     for metric, max_limit in max_limits.items():
         if metric in df.columns:
             logging.info(f"Checking metric '{metric}' against max limit of {max_limit}...")
-            log_outliers(df, metric, max_limit)
+            df = log_outliers(df, metric, max_limit)
 
     # Multi-field dependency checks
     for field_1, field_2 in dependency_rules:
         if field_1 in df.columns and field_2 in df.columns:
             logging.info(f"Checking dependency: '{field_1}' should not exceed '{field_2}'...")
-            log_dependency_violations(df, field_1, field_2)
+            df = log_dependency_violations(df, field_1, field_2)
 
     total_rows_after = len(df)
     rows_removed = total_rows_before - total_rows_after
