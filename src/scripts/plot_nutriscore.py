@@ -6,6 +6,7 @@ from dash.dependencies import Input, Output
 import plotly.graph_objs as go
 from sklearn.linear_model import LinearRegression
 import ast
+from IPython.display import display, HTML
 
 logging.basicConfig(level=logging.INFO)
 
@@ -220,8 +221,6 @@ def start_dash_server(df):
             legend = update_nutriscore_legend(frequency_threshold, df)
             return graph, legend
 
-        # Start the server inline in Jupyter Notebook
-        from IPython.display import display
         app.run_server(mode='inline', port=8051)
 
 def run_dash_app_nutriscore(df):
@@ -243,7 +242,49 @@ def run_dash_app_nutriscore(df):
 
     start_dash_server(df)
 
+def is_running_in_jupyter():
+    """Check if the notebook is running in Jupyter."""
+    try:
+        shell = get_ipython().__class__.__name__
+        if shell == 'ZMQInteractiveShell':
+            return True  # Running in Jupyter
+        else:
+            return False  # Not running in Jupyter
+    except NameError:
+        return False  # Not running in Jupyter
+    
+def run_dash_or_show_iframe(df):
+    """Run Dash in Jupyter, else embed iframe."""
+    if is_running_in_jupyter():
+        print("Running in Jupyter Notebook")
+        run_dash_app_nutriscore(df)
+    else:
+        print("Exporting to HTML")
+        display(HTML("""
+        <div style="text-align: center; padding: 20px; border: 1px solid #ddd; border-radius: 10px; background-color: #f9f9f9;">
+            <h3>Nutrition Score Clustering Dashboard</h3>
+            <p>Click below to load the interactive dashboard.</p>
+            <button onclick="loadDashboard()" style="padding: 10px 20px; background-color: #007bff; color: white; border: none; border-radius: 5px; cursor: pointer;">
+                Load Dashboard
+            </button>
+        </div>
+
+        <script>
+            function loadDashboard() {
+                var iframe = document.createElement("iframe");
+                iframe.src = "https://datascience-adventure.xyz/mission3/nutriscore";
+                iframe.style.width = "100%";
+                iframe.style.height = "600px";
+                iframe.style.border = "none";
+
+                var container = document.querySelector('div[style*="text-align: center"]');
+                container.innerHTML = '';
+                container.appendChild(iframe);
+            }
+        </script>
+        """))
+
 if __name__ == "__main__":
     nutriscore_directory = 'path_to_your_data/nutrition_combination_log.csv'  # Replace with actual path
     df = pd.read_csv(nutriscore_directory)
-    run_dash_app_nutriscore(df)
+    run_dash_or_show_iframe(df)
