@@ -1,6 +1,6 @@
-# src/scripts/plot_imputation.py
 import logging
 import numpy as np
+import pandas as pd
 from dash import Dash, dcc, html
 from dash.dependencies import Input, Output, State
 import plotly.graph_objs as go
@@ -9,47 +9,59 @@ from sklearn.cluster import KMeans
 from sklearn.ensemble import RandomForestRegressor, RandomForestClassifier
 from sklearn.experimental import enable_iterative_imputer  # noqa
 from sklearn.impute import IterativeImputer
+from sklearn.preprocessing import LabelEncoder
 
 logging.basicConfig(level=logging.INFO)
 
 # Function to run the Dash app
 def run_dash_app(df):
+    # Encode categorical columns as numbers
+    def encode_categorical(df):
+        label_encoders = {}
+        for col in ['nutrition_grade_fr', 'pnns_groups_1', 'pnns_groups_2']:
+            if col in df.columns and df[col].dtype == 'object':
+                le = LabelEncoder()
+                df[col] = le.fit_transform(df[col].astype(str))
+                label_encoders[col] = le
+        return df, label_encoders
+
     # Ensure necessary columns are present
-    required_columns = ['nutrition_grade_fr', 'pnns_groups_1', 'nutrition-score-fr_100g']
-    for col in required_columns:
-        if col not in df.columns:
-            df[col] = np.nan  # Create the column if it's missing
+    df, label_encoders = encode_categorical(df)
+
+    # Identify numeric columns (for imputation) and non-numeric columns
+    numeric_columns = df.select_dtypes(include=[np.number]).columns.tolist()
+    non_numeric_columns = df.select_dtypes(exclude=[np.number]).columns.tolist()
 
     # Imputation methods
-    def impute_data(df, method='median', pnns_column='pnns_groups_1'):
+    def impute_data(df, method='median'):
         """Impute missing values based on the selected method."""
         df_imputed = df.copy()
-        features = df.columns.tolist()
-        if pnns_column in features:
-            features.remove(pnns_column)
 
+        # Apply imputation only to numeric columns
         if method == 'knn':
             imputer = KNNImputer(n_neighbors=5)
-            df_imputed[features] = imputer.fit_transform(df[features])
+            df_imputed[numeric_columns] = imputer.fit_transform(df[numeric_columns])
         elif method == 'kmeans':
-            df_filled = df_imputed.fillna(df_imputed.mean())
+            df_filled = df_imputed[numeric_columns].fillna(df_imputed[numeric_columns].mean())
             kmeans = KMeans(n_clusters=5)
-            df_imputed['cluster'] = kmeans.fit_predict(df_filled[features])
-            df_imputed[features] = df_imputed.groupby('cluster')[features].transform(lambda x: x.fillna(x.mean()))
+            df_imputed['cluster'] = kmeans.fit_predict(df_filled)
+            df_imputed[numeric_columns] = df_imputed.groupby('cluster')[numeric_columns].transform(lambda x: x.fillna(x.mean()))
             df_imputed.drop('cluster', axis=1, inplace=True)
         elif method == 'random_forest':
-            for feature in features:
+            for feature in numeric_columns:
                 if df_imputed[feature].isnull().any():
                     not_null = df_imputed[df_imputed[feature].notnull()]
                     is_null = df_imputed[df_imputed[feature].isnull()]
                     rf = RandomForestRegressor(n_estimators=100)
-                    rf.fit(not_null[features].drop(feature, axis=1), not_null[feature])
-                    df_imputed.loc[df_imputed[feature].isnull(), feature] = rf.predict(is_null[features].drop(feature, axis=1))
-        elif method == 'IterativeImputer':
+                    rf.fit(not_null[numeric_columns].drop(feature, axis=1), not_null[feature])
+                    df_imputed.loc[df_imputed[feature].isnull(), feature] = rf.predict(is_null[numeric_columns].drop(feature, axis=1))
+        elif method == 'iterative_imputer':
             imputer = IterativeImputer(max_iter=10, random_state=0)
-            df_imputed[features] = imputer.fit_transform(df[features])
+            df_imputed[numeric_columns] = imputer.fit_transform(df[numeric_columns])
         else:
-            df_imputed[features] = df[features].fillna(df[features].median())
+            # Apply median imputation only to numeric columns
+            df_imputed[numeric_columns] = df[numeric_columns].fillna(df[numeric_columns].median())
+        
         return df_imputed
 
     # Create and launch Dash app
@@ -68,7 +80,7 @@ def run_dash_app(df):
                     {'label': 'KNN Imputation', 'value': 'knn'},
                     {'label': 'K-Means Imputation', 'value': 'kmeans'},
                     {'label': 'Random Forest Imputation', 'value': 'random_forest'},
-                    {'label': 'Gradient Boosting Imputation', 'value': 'gradient_boosting'},
+                    {'label': 'Iterative Imputer', 'value': 'iterative_imputer'},
                 ],
                 value='median',
                 placeholder="Select Imputation Method"
@@ -78,7 +90,7 @@ def run_dash_app(df):
             html.Label("Select Nutrient Columns:"),
             dcc.Dropdown(
                 id='nutrient-columns',
-                options=[{'label': col, 'value': col} for col in df.columns if '_100g' in col],
+                options=[{'label': col, 'value': col} for col in numeric_columns],
                 value=['fat_100g', 'sugars_100g'],
                 multi=True
             ),
@@ -121,7 +133,7 @@ def run_dash_app(df):
     )
     def update_clusters(n_clicks, method, nutrients, num_clusters, is_3d):
         if n_clicks > 0:
-            # Impute the missing values
+            # Impute the missing values (numeric columns only)
             df_imputed = impute_data(df, method)
 
             # Perform clustering based on selected nutrient columns
