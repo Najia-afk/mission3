@@ -1,9 +1,8 @@
+import plotly.graph_objects as go
 import pandas as pd
 import numpy as np
-import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 from scipy import stats
-import plotly.express as px
 
 def create_interactive_outlier_visualization(df, outlier_threshold=1.5, use_log_scale=True):
     """
@@ -22,7 +21,7 @@ def create_interactive_outlier_visualization(df, outlier_threshold=1.5, use_log_
     
     if not numeric_cols:
         print("No numeric columns found in the dataframe")
-        return None, None
+        return
     
     # Create a copy of the dataframe for outlier handling
     df_clean = df.copy()
@@ -33,9 +32,9 @@ def create_interactive_outlier_visualization(df, outlier_threshold=1.5, use_log_
     
     # Identify outliers using IQR method
     for col in numeric_cols:
-        if df[col].count() == 0:  # Skip columns with all NaN values
+        if df[col].count() == 0:
             continue
-        
+            
         # Check if the column has all positive values for log transform
         can_use_log = (df[col].min() > 0) if use_log_scale else False
         
@@ -53,9 +52,9 @@ def create_interactive_outlier_visualization(df, outlier_threshold=1.5, use_log_
         mean = df[col].mean()
         median = df[col].median()
         std_dev = df[col].std()
-        clean_mean = df_clean[col][~outliers].mean()
-        clean_median = df_clean[col][~outliers].median()
-        clean_std_dev = df_clean[col][~outliers].std()
+        clean_mean = df[col][~outliers].mean() if (~outliers).any() else np.nan
+        clean_median = df[col][~outliers].median() if (~outliers).any() else np.nan
+        clean_std_dev = df[col][~outliers].std() if (~outliers).any() else np.nan
         
         # Store statistics
         stats_info[col] = {
@@ -66,7 +65,7 @@ def create_interactive_outlier_visualization(df, outlier_threshold=1.5, use_log_
             'clean_median': clean_median,
             'clean_std_dev': clean_std_dev,
             'can_use_log': can_use_log,
-            'skewness': df[col].skew()  # Add skewness to stats
+            'skewness': df[col].skew()
         }
         
         # Store outlier information
@@ -75,11 +74,9 @@ def create_interactive_outlier_visualization(df, outlier_threshold=1.5, use_log_
             'outlier_percentage': outliers.sum() / df[col].count() * 100,
             'lower_bound': lower_bound,
             'upper_bound': upper_bound,
-            'outlier_indices': outliers[outliers].index,
-            'outlier_points': df[col][outliers].tolist()  # Store actual outlier values
         }
         
-        # Cap outliers in the clean dataframe
+        # Cap outliers in the cleaned dataframe
         df_clean.loc[df_clean[col] < lower_bound, col] = lower_bound
         df_clean.loc[df_clean[col] > upper_bound, col] = upper_bound
     
@@ -115,60 +112,91 @@ def create_interactive_outlier_visualization(df, outlier_threshold=1.5, use_log_
     # Initialize with the first numeric column
     first_col = numeric_cols[0]
     
-    # Add box plot for the first column (with outliers)
-    fig.add_trace(
-        go.Box(
-            y=df[first_col].dropna(), 
-            name='With Outliers',
-            boxmean=True,  # adds a marker for the mean
-            marker_color='red',
-            visible=True,
-            boxpoints='outliers',  # Only show outlier points
-            jitter=0,  # No jitter needed if only showing outliers
-            pointpos=0
-        ),
-        row=1, col=1
-    )
-    
-    # Add histogram for the first column (without outliers)
-    fig.add_trace(
-        go.Histogram(
-            x=df_clean[first_col].dropna(),
-            name='Without Outliers',
-            marker_color='blue',
-            opacity=0.7,
-            visible=True,
-            histnorm='probability density'
-        ),
-        row=1, col=2
-    )
-    
-    # Add a normal distribution curve on the histogram
-    clean_mean = stats_info[first_col]['clean_mean']
-    clean_std = stats_info[first_col]['clean_std_dev']
-
-    # Check for valid parameters before calculating normal distribution
-    if pd.notna(clean_mean) and pd.notna(clean_std) and clean_std > 0:
-        x_range = np.linspace(
-            df_clean[first_col].min(), 
-            df_clean[first_col].max(), 
-            100
-        )
-        normal_y = stats.norm.pdf(x_range, loc=clean_mean, scale=clean_std)
+    # PRE-COMPUTE BOXPLOT STATISTICS instead of using raw data
+    for i, col in enumerate(numeric_cols):
+        # Only calculate for non-empty columns
+        if df[col].count() == 0:
+            continue
+            
+        # Pre-calculate boxplot statistics
+        q1 = df[col].quantile(0.25)
+        median = df[col].median()
+        q3 = df[col].quantile(0.75)
+        iqr = q3 - q1
+        lower_fence = q1 - outlier_threshold * iqr
+        upper_fence = q3 + outlier_threshold * iqr
         
-        fig.add_trace(
-            go.Scatter(
-                x=x_range,
-                y=normal_y,
-                mode='lines',
-                name='Normal Distribution',
-                line=dict(color='green', width=2),
-                visible=True
-            ),
-            row=1, col=2
-        )
-    else:
-        print(f"Warning: Cannot calculate normal distribution for {first_col}. Mean: {clean_mean}, StdDev: {clean_std}")
+        # Get only the outliers for plotting (much fewer points)
+        outlier_values = df[col][(df[col] < lower_fence) | (df[col] > upper_fence)].sample(
+            min(100, ((df[col] < lower_fence) | (df[col] > upper_fence)).sum()), 
+            random_state=42
+        ).tolist() if ((df[col] < lower_fence) | (df[col] > upper_fence)).any() else []
+        
+        # Pre-aggregate the histogram data into bins
+        if i == 0:
+            # For the first column, add to the plot
+            fig.add_trace(
+                go.Box(
+                    name=col,
+                    marker_color='red',
+                    visible=True,
+                    boxpoints='outliers',
+                    jitter=0,
+                    pointpos=0,
+                    # Use pre-computed statistics
+                    q1=[q1],
+                    median=[median],
+                    q3=[q3],
+                    lowerfence=[lower_fence],
+                    upperfence=[upper_fence],
+                    y=outlier_values  # Only include outlier points
+                ),
+                row=1, col=1
+            )
+            
+            # Calculate histogram bins for cleaned data
+            clean_data = df_clean[col].dropna()
+            if len(clean_data) > 0:
+                # Use Sturges' formula for bin count
+                bin_count = int(np.ceil(np.log2(len(clean_data))) + 1)
+                bin_count = min(50, max(10, bin_count))  # Keep bins reasonable
+                
+                hist, bin_edges = np.histogram(clean_data, bins=bin_count, density=True)
+                
+                # Use the center of each bin for x values
+                bin_centers = (bin_edges[:-1] + bin_edges[1:]) / 2
+                
+                fig.add_trace(
+                    go.Bar(
+                        x=bin_centers,
+                        y=hist,
+                        name='Without Outliers',
+                        marker_color='blue',
+                        opacity=0.7,
+                        visible=True
+                    ),
+                    row=1, col=2
+                )
+                
+                # Add normal distribution curve if appropriate
+                clean_mean = stats_info[col]['clean_mean']
+                clean_std = stats_info[col]['clean_std_dev']
+                
+                if pd.notna(clean_mean) and pd.notna(clean_std) and clean_std > 0:
+                    x_range = np.linspace(min(bin_edges), max(bin_edges), 100)
+                    pdf = stats.norm.pdf(x_range, loc=clean_mean, scale=clean_std)
+                    
+                    fig.add_trace(
+                        go.Scatter(
+                            x=x_range,
+                            y=pdf,
+                            mode='lines',
+                            name='Normal Distribution',
+                            line=dict(color='green', dash='dash'),
+                            visible=True
+                        ),
+                        row=1, col=2
+                    )
     
     # Add statistical annotations for the first column
     stats_annotations = [
@@ -197,92 +225,51 @@ def create_interactive_outlier_visualization(df, outlier_threshold=1.5, use_log_
         opacity=0.8
     )
     
-    # Add traces for other columns (initially hidden)
-    for i, col in enumerate(numeric_cols[1:], 1):
-        # Box plot (with outliers)
-        fig.add_trace(
-            go.Box(
-                y=df[col].dropna(), 
-                name='With Outliers',
-                boxmean=True,
-                marker_color='red',
-                visible=False,
-                boxpoints='outliers',  # Only show outlier points
-                jitter=0,  # No jitter needed if only showing outliers
-                pointpos=0
-            ),
-            row=1, col=1
-        )
+    # Create dropdown menu buttons
+    dropdown_buttons = []
+    
+    # Create dropdown entries for each numeric column
+    for i, col in enumerate(numeric_cols):
+        if df[col].count() == 0:
+            continue
+            
+        # Pre-calculate statistics as we did for the first column
+        q1 = df[col].quantile(0.25)
+        median = df[col].median()
+        q3 = df[col].quantile(0.75)
+        iqr = q3 - q1
+        lower_fence = q1 - outlier_threshold * iqr
+        upper_fence = q3 + outlier_threshold * iqr
         
-        # Histogram (without outliers)
-        fig.add_trace(
-            go.Histogram(
-                x=df_clean[col].dropna(),
-                name='Without Outliers',
-                marker_color='blue',
-                opacity=0.7,
-                visible=False,
-                histnorm='probability density'
-            ),
-            row=1, col=2
-        )
+        # Get only outliers (limited sample)
+        outlier_values = df[col][(df[col] < lower_fence) | (df[col] > upper_fence)].sample(
+            min(100, ((df[col] < lower_fence) | (df[col] > upper_fence)).sum()), 
+            random_state=42
+        ).tolist() if ((df[col] < lower_fence) | (df[col] > upper_fence)).any() else []
         
-        # Normal distribution curve for the cleaned data
+        # Pre-calculate histogram data
+        clean_data = df_clean[col].dropna()
+        bin_count = int(np.ceil(np.log2(len(clean_data))) + 1) if len(clean_data) > 0 else 10
+        bin_count = min(50, max(10, bin_count))
+        
+        hist_data = {}
+        if len(clean_data) > 0:
+            hist, bin_edges = np.histogram(clean_data, bins=bin_count, density=True)
+            bin_centers = (bin_edges[:-1] + bin_edges[1:]) / 2
+            hist_data = {'centers': bin_centers, 'heights': hist, 'edges': bin_edges}
+            
+        # Normal distribution data if applicable
         clean_mean = stats_info[col]['clean_mean']
         clean_std = stats_info[col]['clean_std_dev']
         
-        # Add check for valid parameters here as well
-        if pd.notna(clean_mean) and pd.notna(clean_std) and clean_std > 0:
-            try:
-                x_range = np.linspace(
-                    df_clean[col].min(), 
-                    df_clean[col].max(), 
-                    100
-                )
-                normal_y = stats.norm.pdf(x_range, loc=clean_mean, scale=clean_std)
-                
-                fig.add_trace(
-                    go.Scatter(
-                        x=x_range,
-                        y=normal_y,
-                        mode='lines',
-                        name='Normal Distribution',
-                        line=dict(color='green', width=2),
-                        visible=False
-                    ),
-                    row=1, col=2
-                )
-            except Exception as e:
-                print(f"Warning: Could not create normal curve for {col}: {e}")
-                # Add an empty trace to maintain the correct count
-                fig.add_trace(
-                    go.Scatter(
-                        x=[],
-                        y=[],
-                        mode='lines',
-                        name='Normal Distribution',
-                        line=dict(color='green', width=2),
-                        visible=False
-                    ),
-                    row=1, col=2
-                )
-        else:
-            print(f"Warning: Cannot calculate normal distribution for {col}. Mean: {clean_mean}, StdDev: {clean_std}")
-            # Add an empty trace to maintain the correct count
-            fig.add_trace(
-                go.Scatter(
-                    x=[],
-                    y=[],
-                    mode='lines',
-                    name='Normal Distribution',
-                    line=dict(color='green', width=2),
-                    visible=False
-                ),
-                row=1, col=2
-            )
+        normal_curve = None
+        if pd.notna(clean_mean) and pd.notna(clean_std) and clean_std > 0 and len(clean_data) > 0:
+            x_range = np.linspace(min(bin_edges), max(bin_edges), 100)
+            pdf = stats.norm.pdf(x_range, loc=clean_mean, scale=clean_std)
+            normal_curve = {'x': x_range, 'y': pdf}
         
-        # Add statistical annotations for each column
-        stats_annotations.append(
+        # Create annotation text
+        annotation_text = (
             f"<b>With Outliers:</b><br>" +
             f"Mean: {stats_info[col]['mean']:.2f}<br>" +
             f"Median: {stats_info[col]['median']:.2f}<br>" +
@@ -293,34 +280,67 @@ def create_interactive_outlier_visualization(df, outlier_threshold=1.5, use_log_
             f"Median: {stats_info[col]['clean_median']:.2f}<br>" +
             f"StdDev: {stats_info[col]['clean_std_dev']:.2f}"
         )
-    
-    # Create dropdown menu for column selection
-    dropdown_buttons = []
-    for i, col in enumerate(numeric_cols):
-        # Calculate which traces should be visible
-        visible = [False] * (len(numeric_cols) * 3)  # 3 traces per column: box, hist, scatter
-        # Set visibility for the current column (index i)
-        base_idx = i * 3
-        if i == 0:
-            base_idx = 0
-        visible[base_idx] = True      # Box plot
-        visible[base_idx + 1] = True  # Histogram
-        visible[base_idx + 2] = True  # Normal distribution curve
         
+        # Create args for dropdown button
+        button_args = [
+            # Update boxplot
+            {
+                'y': [outlier_values],
+                'q1': [q1], 'median': [median], 'q3': [q3],
+                'lowerfence': [lower_fence], 'upperfence': [upper_fence],
+                'name': col
+            },
+            # Update histogram
+            {'x': hist_data.get('centers', []), 'y': hist_data.get('heights', []), 'name': col}
+        ]
+        
+        # Add normal curve if available
+        if normal_curve:
+            button_args.append({
+                'x': normal_curve['x'], 'y': normal_curve['y'],
+                'line': {'color': 'green', 'dash': 'dash'}
+            })
+        else:
+            button_args.append({'x': [], 'y': []})
+            
+        # Update annotation
+        button_args.append({'text': annotation_text})
+        
+        # Update plot title
+        title_update = f"Outlier Analysis for {col} (threshold={outlier_threshold})"
+        
+        # Create the dropdown button
         dropdown_buttons.append(
             dict(
+                method='update',
                 label=col,
-                method="update",
                 args=[
-                    {"visible": visible},
                     {
-                        "title": f"Outlier Analysis for {col}",
+                        # Update boxplot data
+                        'y': [
+                            # First trace (boxplot)
+                            outlier_values  
+                        ],
+                        # Update boxplot stats
+                        'q1': [[q1]],
+                        'median': [[median]],
+                        'q3': [[q3]],
+                        'lowerfence': [[lower_fence]],
+                        'upperfence': [[upper_fence]],
+                        'name': [[col]],
+                        
+                        # Update histogram data (second trace)
+                        'x': [None, hist_data.get('centers', []), normal_curve.get('x', []) if normal_curve else []],
+                        'y': [None, hist_data.get('heights', []), normal_curve.get('y', []) if normal_curve else []]
+                    },
+                    {
+                        # Replace the entire annotations array
                         "annotations": [
                             dict(
                                 xref="paper", yref="paper",
                                 x=1.02, y=0.4,
                                 xanchor="left", yanchor="middle",
-                                text=stats_annotations[i],
+                                text=annotation_text,
                                 showarrow=False,
                                 font=dict(size=12),
                                 bordercolor="black",
@@ -329,7 +349,9 @@ def create_interactive_outlier_visualization(df, outlier_threshold=1.5, use_log_
                                 bgcolor="white",
                                 opacity=0.8
                             )
-                        ]
+                        ],
+                        # Update title
+                        'title': title_update
                     }
                 ]
             )
@@ -341,14 +363,14 @@ def create_interactive_outlier_visualization(df, outlier_threshold=1.5, use_log_
         showlegend=True,
         title_x=0.5,
         margin=dict(r=200),
+        height=600,
         updatemenus=[
-            # Column selection dropdown
             dict(
                 buttons=dropdown_buttons,
                 direction="down",
                 showactive=True,
                 x=0.5,
-                y=1.15,
+                y=1.1,
                 xanchor="center",
                 yanchor="top"
             )
@@ -359,36 +381,6 @@ def create_interactive_outlier_visualization(df, outlier_threshold=1.5, use_log_
     fig.update_xaxes(title_text="Variable Value", row=1, col=2)
     fig.update_yaxes(title_text="Variable Value", row=1, col=1)  # Y-axis for boxplot shows the variable values
     fig.update_yaxes(title_text="Frequency Density", row=1, col=2)  # Y-axis for histogram shows frequency/density
-    
-    # Apply log scale for highly skewed columns
-    if use_log_scale and stats_info[first_col]['can_use_log'] and abs(stats_info[first_col]['skewness']) > 2:
-        fig.update_yaxes(type="log", row=1, col=1)
-        fig.update_layout(title=f"Outlier Analysis for {first_col} (threshold={outlier_threshold}, log scale)")
-    
-    # Apply log scale to other columns when selected
-    for i, col in enumerate(numeric_cols):
-        # Store log scale info in the dropdown selection
-        if use_log_scale and stats_info[col]['can_use_log'] and abs(stats_info[col]['skewness']) > 2:
-            dropdown_buttons[i]['args'][1]['yaxis'] = {"type": "log", "title": "Variable Value (log scale)"}
-            dropdown_buttons[i]['args'][1]['title'] = f"Outlier Analysis for {col} (threshold={outlier_threshold}, log scale)"
-        else:
-            dropdown_buttons[i]['args'][1]['yaxis'] = {"type": "linear", "title": "Variable Value"}
-            dropdown_buttons[i]['args'][1]['title'] = f"Outlier Analysis for {col} (threshold={outlier_threshold})"
-    
-    # Update dropdown menu with modified buttons
-    fig.update_layout(
-        updatemenus=[
-            dict(
-                buttons=dropdown_buttons,
-                direction="down",
-                showactive=True,
-                x=0.5,
-                y=1.15,
-                xanchor="center",
-                yanchor="top"
-            )
-        ]
-    )
     
     # Show the figure
     fig.show()
