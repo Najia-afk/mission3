@@ -32,6 +32,7 @@ def identify_nutrition_outliers(df, nutrient_limits):
         lower_bound = lower_bounds[col]
         
         # Identify outliers based on limits (below lower or above upper)
+        # Explicitly check for negative values (< 0) and values above threshold
         outliers = ((df[col] < lower_bound) | (df[col] > upper_bound))
         
         # Skip if no data in column
