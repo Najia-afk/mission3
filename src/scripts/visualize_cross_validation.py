@@ -38,76 +38,90 @@ def check_sodium_salt_relationship(df):
     return validation_result, df_validated
 
 def check_energy_macronutrients_relationship(df):
-    """Calculate validation metrics for energy vs macronutrients relationship"""
+    """
+    Calculate validation metrics for energy vs macronutrients relationship and
+    fix inconsistencies and missing values using the Atwater factors formula.
+    """
     validation_result = {}
     df_validated = df.copy()
     
-    # Atwater factors: protein=4kcal/g, carbs=4kcal/g, fat=9kcal/g
-    mask_energy = (~df['energy_100g'].isna()) & (~df['proteins_100g'].isna()) & (~df['carbohydrates_100g'].isna()) & (~df['fat_100g'].isna())
-    if mask_energy.sum() > 0:
-        filtered_energy_df = df.loc[mask_energy]
+    # Step 1: Fix cases where energy value doesn't align with macronutrients
+    mask_all_present = (~df['energy_100g'].isna()) & (~df['proteins_100g'].isna()) & (~df['carbohydrates_100g'].isna()) & (~df['fat_100g'].isna())
+    if mask_all_present.sum() > 0:
+        filtered_df = df.loc[mask_all_present]
         
         expected_energy = (
-            filtered_energy_df['proteins_100g'] * 4 + 
-            filtered_energy_df['carbohydrates_100g'] * 4 + 
-            filtered_energy_df['fat_100g'] * 9
+            filtered_df['proteins_100g'] * 4 + 
+            filtered_df['carbohydrates_100g'] * 4 + 
+            filtered_df['fat_100g'] * 9
         )
-        actual_energy = filtered_energy_df['energy_100g']
+        actual_energy = filtered_df['energy_100g']
         
         deviation = np.abs((actual_energy - expected_energy) / expected_energy * 100)
         inconsistent_energy = (deviation > 20).sum()
         
+        # Fix inconsistent energy values
+        fix_indices = filtered_df[deviation > 20].index
+        if len(fix_indices) > 0:
+            df_validated.loc[fix_indices, 'energy_100g'] = np.minimum(
+                # Calculate energy from macronutrients but cap at 950
+                np.minimum(
+                    (df_validated.loc[fix_indices, 'proteins_100g'] * 4 + 
+                     df_validated.loc[fix_indices, 'carbohydrates_100g'] * 4 + 
+                     df_validated.loc[fix_indices, 'fat_100g'] * 9),
+                    950  # Maximum reasonable energy value
+                ),
+                950  # Ensure we don't exceed 950 kcal/100g
+            )
+        
         validation_result = {
             'Relationship': 'Energy-Macronutrients',
             'Description': 'energy ≈ proteins*4 + carbs*4 + fat*9',
-            'Total Checked': mask_energy.sum(),
-            'Consistent': mask_energy.sum() - inconsistent_energy,
+            'Total Checked': mask_all_present.sum(),
+            'Consistent': mask_all_present.sum() - inconsistent_energy,
             'Inconsistent': inconsistent_energy,
-            'Consistency %': (1 - inconsistent_energy / mask_energy.sum()) * 100 if mask_energy.sum() > 0 else 0
+            'Consistency %': (1 - inconsistent_energy / mask_all_present.sum()) * 100 if mask_all_present.sum() > 0 else 0
         }
     
-    return validation_result, df_validated
-
-def check_pnns_hierarchy(df):
-    """Calculate validation metrics for PNNS groups hierarchical relationship"""
-    validation_result = {}
-    df_validated = df.copy()
+    # Step 2: Impute missing macronutrients when possible
+    # Case: Missing protein
+    mask_missing_protein = (~df['energy_100g'].isna()) & (df['proteins_100g'].isna()) & (~df['carbohydrates_100g'].isna()) & (~df['fat_100g'].isna())
+    if mask_missing_protein.sum() > 0:
+        protein_indices = df[mask_missing_protein].index
+        energy_remaining = df_validated.loc[protein_indices, 'energy_100g'] - (
+            df_validated.loc[protein_indices, 'carbohydrates_100g'] * 4 + 
+            df_validated.loc[protein_indices, 'fat_100g'] * 9
+        )
+        # Calculate protein value (ensuring non-negative and reasonable values)
+        df_validated.loc[protein_indices, 'proteins_100g'] = np.maximum(0, np.minimum(energy_remaining / 4, 90))
     
-    if 'pnns_groups_1' in df.columns and 'pnns_groups_2' in df.columns:
-        mask_pnns = (~df['pnns_groups_1'].isna()) & (~df['pnns_groups_2'].isna())
-        if mask_pnns.sum() > 0:
-            filtered_pnns_df = df.loc[mask_pnns]
-            
-            # Build parent-child mapping
-            pnns_mappings = filtered_pnns_df.groupby(['pnns_groups_1', 'pnns_groups_2']).size().reset_index(name='count')
-            valid_mappings = {}
-            for _, row in pnns_mappings.iterrows():
-                parent = row['pnns_groups_1']
-                child = row['pnns_groups_2']
-                if parent not in valid_mappings:
-                    valid_mappings[parent] = set()
-                valid_mappings[parent].add(child)
-            
-            # Check consistency
-            inconsistent_count = 0
-            inconsistent_indices = []
-            
-            for idx, row in filtered_pnns_df.iterrows():
-                parent = row['pnns_groups_1']
-                child = row['pnns_groups_2']
-                
-                if parent in valid_mappings and child not in valid_mappings[parent]:
-                    inconsistent_count += 1
-                    inconsistent_indices.append(idx)
-            
-            validation_result = {
-                'Relationship': 'PNNS Hierarchy',
-                'Description': 'pnns_groups_2 belongs to parent pnns_groups_1',
-                'Total Checked': mask_pnns.sum(),
-                'Consistent': mask_pnns.sum() - inconsistent_count,
-                'Inconsistent': inconsistent_count,
-                'Consistency %': (1 - inconsistent_count / mask_pnns.sum()) * 100 if mask_pnns.sum() > 0 else 0
-            }
+    # Case: Missing carbohydrates
+    mask_missing_carbs = (~df['energy_100g'].isna()) & (~df['proteins_100g'].isna()) & (df['carbohydrates_100g'].isna()) & (~df['fat_100g'].isna())
+    if mask_missing_carbs.sum() > 0:
+        carbs_indices = df[mask_missing_carbs].index
+        energy_remaining = df_validated.loc[carbs_indices, 'energy_100g'] - (
+            df_validated.loc[carbs_indices, 'proteins_100g'] * 4 + 
+            df_validated.loc[carbs_indices, 'fat_100g'] * 9
+        )
+        # Calculate carbs value (ensuring non-negative and reasonable values)
+        df_validated.loc[carbs_indices, 'carbohydrates_100g'] = np.maximum(0, np.minimum(energy_remaining / 4, 95))
+    
+    # Case: Missing fat
+    mask_missing_fat = (~df['energy_100g'].isna()) & (~df['proteins_100g'].isna()) & (~df['carbohydrates_100g'].isna()) & (df['fat_100g'].isna())
+    if mask_missing_fat.sum() > 0:
+        fat_indices = df[mask_missing_fat].index
+        energy_remaining = df_validated.loc[fat_indices, 'energy_100g'] - (
+            df_validated.loc[fat_indices, 'proteins_100g'] * 4 + 
+            df_validated.loc[fat_indices, 'carbohydrates_100g'] * 4
+        )
+        # Calculate fat value (ensuring non-negative and reasonable values)
+        df_validated.loc[fat_indices, 'fat_100g'] = np.maximum(0, np.minimum(energy_remaining / 9, 95))
+    
+    # Add imputation counts to the validation result
+    if validation_result:
+        validation_result['Proteins Imputed'] = mask_missing_protein.sum()
+        validation_result['Carbohydrates Imputed'] = mask_missing_carbs.sum()
+        validation_result['Fat Imputed'] = mask_missing_fat.sum()
     
     return validation_result, df_validated
 
@@ -126,75 +140,6 @@ def calculate_nutrient_correlations(df):
     # Calculate correlation matrix
     corr_df = df[nutrient_cols].corr()
     return corr_df, nutrient_cols
-
-def identify_nutrient_clusters(corr_df):
-    """Identify clusters of related nutrients based on correlation strength"""
-    if corr_df is None:
-        return pd.DataFrame(columns=['Feature', 'Cluster', 'Description'])
-    
-    try:
-        # Use seaborn for hierarchical clustering
-        plt.figure(figsize=(10, 8))
-        sns_heat = sns.clustermap(
-            corr_df, 
-            cmap='RdBu_r',
-            center=0,
-            figsize=(10, 8)
-        )
-        
-        # Get the cluster order
-        row_order = sns_heat.dendrogram_row.reordered_ind
-        clustered_features = [corr_df.index[i] for i in row_order]
-        
-        # Group related features
-        feature_clusters = []
-        current_cluster = []
-        
-        for i, feature in enumerate(clustered_features):
-            if i == 0:
-                current_cluster = [feature]
-            else:
-                prev_feature = clustered_features[i-1]
-                if abs(corr_df.loc[feature, prev_feature]) > 0.6:  # Strong correlation threshold
-                    current_cluster.append(feature)
-                else:
-                    feature_clusters.append(current_cluster)
-                    current_cluster = [feature]
-        
-        # Add the last cluster if not empty
-        if current_cluster:
-            feature_clusters.append(current_cluster)
-        
-        # Create cluster descriptions
-        cluster_data = []
-        for i, cluster in enumerate(feature_clusters):
-            for feature in cluster:
-                # Determine cluster description
-                if any('fat' in f.lower() for f in cluster):
-                    description = "Fat-related measures"
-                elif any('sugar' in f.lower() for f in cluster) or any('carbo' in f.lower() for f in cluster):
-                    description = "Carbohydrate and sugar measures"
-                elif any('energy' in f.lower() for f in cluster):
-                    description = "Energy-related measures"
-                elif any('salt' in f.lower() or 'sodium' in f.lower() for f in cluster):
-                    description = "Salt and sodium measures"
-                elif any('protein' in f.lower() for f in cluster):
-                    description = "Protein-related measures"
-                else:
-                    description = f"Feature cluster {i+1}"
-                    
-                cluster_data.append({
-                    'Feature': feature,
-                    'Cluster': f"Cluster {i+1}",
-                    'Description': description
-                })
-        
-        cluster_df = pd.DataFrame(cluster_data)
-        return cluster_df
-    
-    except Exception as e:
-        print(f"Clustering failed: {str(e)}")
-        return pd.DataFrame(columns=['Feature', 'Cluster', 'Description'])
 
 def analyze_category_nutrient_relationships(df, nutrient_cols):
     """Analyze relationships between categorical variables and nutrients"""
@@ -274,95 +219,6 @@ def plot_category_relationships(cat_nutrient_df):
     fig.update_layout(height=500, title_x=0.5)
     return fig
 
-def create_validation_summary_plot(validation_summary):
-    """Create validation results visualization"""
-    fig = go.Figure()
-    
-    if not validation_summary.empty:
-        fig.add_trace(
-            go.Bar(
-                x=validation_summary['Relationship'],
-                y=validation_summary['Consistency %'],
-                text=[f"{x:.1f}%" for x in validation_summary['Consistency %']],
-                textposition='auto',
-                name='Consistency %',
-                marker_color=['#00cc96' if x > 95 else '#ffa15a' if x > 80 else '#ef553b' for x in validation_summary['Consistency %']]
-            )
-        )
-        
-        fig.update_layout(
-            title_text='Data Relationship Validation Results',
-            yaxis=dict(range=[0, 100], ticksuffix="%"),
-            title_x=0.5
-        )
-    else:
-        fig.add_annotation(text="No validation relationships could be tested",
-                          xref="paper", yref="paper", x=0.5, y=0.5, showarrow=False)
-    
-    return fig
-
-def create_validation_rules_table():
-    """Create validation rules table"""
-    validation_rules = {
-        'Relationship': ['Sodium-Salt', 'Energy-Macronutrients', 'PNNS Hierarchy'],
-        'Rule': [
-            'salt = sodium * 2.5',
-            'energy ≈ proteins*4 + carbs*4 + fat*9',
-            'pnns_groups_2 must belong to its parent pnns_groups_1'
-        ],
-        'Imputation Strategy': [
-            'Calculate salt from sodium or vice versa based on reliability',
-            'Recalculate energy values from macronutrients when inconsistent',
-            'Impute child category based on parent and similar products'
-        ]
-    }
-    
-    rules_df = pd.DataFrame(validation_rules)
-    fig = go.Figure(data=[
-        go.Table(
-            header=dict(
-                values=list(rules_df.columns),
-                fill_color='royalblue',
-                align='center',
-                font=dict(color='white', size=12)
-            ),
-            cells=dict(
-                values=[rules_df[col] for col in rules_df.columns],
-                fill_color='lavender',
-                align='left'
-            )
-        )
-    ])
-    
-    fig.update_layout(title_text="Data Validation Rules", title_x=0.5)
-    return fig
-
-def create_cluster_table(cluster_df):
-    """Create nutrient clusters table"""
-    if cluster_df.empty:
-        fig = go.Figure()
-        fig.add_annotation(text="No nutrient clusters could be identified",
-                          xref="paper", yref="paper", x=0.5, y=0.5, showarrow=False)
-        return fig
-    
-    fig = go.Figure(data=[
-        go.Table(
-            header=dict(
-                values=list(cluster_df.columns),
-                fill_color='royalblue',
-                align='center',
-                font=dict(color='white', size=12)
-            ),
-            cells=dict(
-                values=[cluster_df[col] for col in cluster_df.columns],
-                fill_color='lavender',
-                align='left'
-            )
-        )
-    ])
-    
-    fig.update_layout(title_text="Nutrient Feature Clusters", title_x=0.5)
-    return fig
 
 # MAIN FUNCTIONS
 def validate_nutritional_relationships(df):
@@ -391,11 +247,6 @@ def validate_nutritional_relationships(df):
     if energy_macro_result:
         validation_results.append(energy_macro_result)
     
-    # Check PNNS hierarchy
-    pnns_result, df_validated = check_pnns_hierarchy(df_validated)
-    if pnns_result:
-        validation_results.append(pnns_result)
-    
     # Create summary dataframe
     validation_summary = pd.DataFrame(validation_results)
     
@@ -409,13 +260,10 @@ def analyze_variable_dependencies(df):
         df: DataFrame containing the nutritional data
         
     Returns:
-        tuple: (correlation_fig, categorical_relationship_fig, cluster_df)
+        tuple: (correlation_fig, categorical_relationship_fig)
     """
     # Calculate correlations between nutrients
     corr_df, nutrient_cols = calculate_nutrient_correlations(df)
-    
-    # Identify nutrient clusters
-    cluster_df = identify_nutrient_clusters(corr_df)
     
     # Analyze category-nutrient relationships
     cat_nutrient_df = analyze_category_nutrient_relationships(df, nutrient_cols)
@@ -424,7 +272,7 @@ def analyze_variable_dependencies(df):
     corr_fig = plot_correlation_matrix(corr_df)
     cat_fig = plot_category_relationships(cat_nutrient_df)
     
-    return corr_fig, cat_fig, cluster_df
+    return corr_fig, cat_fig
 
 def create_validation_dashboard(df):
     """
@@ -439,16 +287,9 @@ def create_validation_dashboard(df):
     # Run validation
     validation_summary, df_validated = validate_nutritional_relationships(df)
     
-    # Create validation results visualization
-    val_fig = create_validation_summary_plot(validation_summary)
     
     # Run dependency analysis
-    corr_fig, cat_fig, cluster_df = analyze_variable_dependencies(df)
+    corr_fig, cat_fig = analyze_variable_dependencies(df)
+
     
-    # Create rules table
-    rules_fig = create_validation_rules_table()
-    
-    # Create clusters table
-    clusters_fig = create_cluster_table(cluster_df)
-    
-    return validation_summary, df_validated, val_fig, corr_fig, cat_fig, rules_fig, clusters_fig
+    return validation_summary, df_validated, corr_fig, cat_fig

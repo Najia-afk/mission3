@@ -24,21 +24,49 @@ class ColumnSelector(BaseEstimator, TransformerMixin):
     def get_feature_names_out(self, input_features=None):
         return self.columns
 
-class NumericalFeatureImputer(BaseEstimator, TransformerMixin):
-    """Handle numerical features with scaling and imputation."""
-    def __init__(self, max_iter=50, n_estimators=10, random_state=42):
+class MultiStageNumericalImputer(BaseEstimator, TransformerMixin):
+    """Handle numerical features with a multi-stage imputation strategy."""
+    def __init__(self, random_state=42, knn_neighbors=5, max_iter=50, n_estimators=10,
+                max_missing_pct=50, min_samples=10):
+        self.random_state = random_state
+        self.knn_neighbors = knn_neighbors
         self.max_iter = max_iter
         self.n_estimators = n_estimators
-        self.random_state = random_state
+        self.max_missing_pct = max_missing_pct
+        self.min_samples = min_samples
         self.scaler = RobustScaler()
-        self.imputer = None
+        self.knn_imputer = None
+        self.iter_imputer = None
+        self.column_means = {}
+        self.skip_imputation_cols = []
         
     def fit(self, X, y=None):
-        # Apply scaling
+        # Identify columns with too many missing values
+        missing_pct = X.isna().mean() * 100
+        self.skip_imputation_cols = missing_pct[missing_pct > self.max_missing_pct].index.tolist()
+        
+        if len(self.skip_imputation_cols) > 0:
+            print(f"Skipping imputation for columns with >={self.max_missing_pct}% missing values:")
+            for col in self.skip_imputation_cols:
+                print(f"  - {col}: {missing_pct[col]:.1f}% missing")
+        
+        # Store column means for final fallback
+        for col in X.columns:
+            if col not in self.skip_imputation_cols:
+                self.column_means[col] = X[col].mean()
+        
+        # Scale the data for imputation
         X_scaled = self.scaler.fit_transform(X.fillna(0))
         
-        # Create and fit imputer
-        self.imputer = IterativeImputer(
+        # Set up KNN imputer
+        self.knn_imputer = KNNImputer(
+            n_neighbors=self.knn_neighbors,
+            weights='distance',
+            missing_values=np.nan
+        )
+        
+        # Set up iterative imputer
+        self.iter_imputer = IterativeImputer(
             max_iter=self.max_iter,
             tol=1e-3,
             random_state=self.random_state,
@@ -46,22 +74,101 @@ class NumericalFeatureImputer(BaseEstimator, TransformerMixin):
             verbose=0,
             imputation_order='ascending'
         )
-        self.imputer.fit(X_scaled)
+        
+        # Fit both imputers
+        self.knn_imputer.fit(X_scaled)
+        self.iter_imputer.fit(X_scaled)
+        
         return self
     
     def transform(self, X):
-        # Scale the data
-        X_scaled = self.scaler.transform(X.fillna(0))
+        # Store original missing mask
+        missing_mask = X.isna()
         
-        # Apply imputation
-        X_imputed_scaled = self.imputer.transform(X_scaled)
+        # Create output dataframe
+        X_out = X.copy()
         
-        # Inverse transform scaling
-        X_imputed = self.scaler.inverse_transform(X_imputed_scaled)
+        # Scale with temporary zeros
+        X_temp = X.copy().fillna(0)
+        X_scaled = self.scaler.transform(X_temp)
         
-        # Convert back to DataFrame
-        return pd.DataFrame(X_imputed, columns=X.columns, index=X.index)
-
+        # Convert to DataFrame for tracking progress
+        X_scaled_df = pd.DataFrame(X_scaled, columns=X.columns, index=X.index)
+        
+        # Stage 1: KNN Imputation
+        print("  Stage 1: KNN imputation")
+        try:
+            X_knn_imputed = self.knn_imputer.transform(X_scaled)
+            X_knn_df = pd.DataFrame(X_knn_imputed, columns=X.columns, index=X.index)
+            
+            # Only keep KNN imputations where it worked (not NaN)
+            for col in X_scaled_df.columns:
+                # Skip columns with too many missing values
+                if col in self.skip_imputation_cols:
+                    continue
+                    
+                knn_worked_mask = ~np.isnan(X_knn_df[col]) & missing_mask[col]
+                X_scaled_df.loc[knn_worked_mask, col] = X_knn_df.loc[knn_worked_mask, col]
+        except Exception as e:
+            print(f"  KNN imputation error: {str(e)}, skipping...")
+        
+        # Track remaining missing values
+        still_missing = X_scaled_df.isna()
+        missing_count = still_missing.sum().sum()
+        if missing_count > 0:
+            print(f"  After KNN: {missing_count} values still missing")
+            
+            # Stage 2: Iterative Imputation
+            print("  Stage 2: Iterative imputation")
+            try:
+                X_iter_imputed = self.iter_imputer.transform(X_scaled_df.fillna(0))
+                X_iter_df = pd.DataFrame(X_iter_imputed, columns=X.columns, index=X.index)
+                
+                # Only use iterative imputation for values still missing after KNN
+                for col in X_scaled_df.columns:
+                    # Skip columns with too many missing values
+                    if col in self.skip_imputation_cols:
+                        continue
+                        
+                    iter_needed_mask = still_missing[col]
+                    X_scaled_df.loc[iter_needed_mask, col] = X_iter_df.loc[iter_needed_mask, col]
+            except Exception as e:
+                print(f"  Iterative imputation error: {str(e)}, skipping...")
+            
+            # Track remaining missing values
+            still_missing = X_scaled_df.isna()
+            missing_count = still_missing.sum().sum()
+            if missing_count > 0:
+                print(f"  After iterative: {missing_count} values still missing")
+                
+                # Stage 3: Mean Imputation
+                print("  Stage 3: Mean imputation")
+                for col in X_scaled_df.columns:
+                    # Skip columns with too many missing values
+                    if col in self.skip_imputation_cols:
+                        continue
+                        
+                    # Apply mean imputation for anything still missing
+                    mean_needed_mask = still_missing[col]
+                    if mean_needed_mask.any() and col in self.column_means:
+                        # Need to scale the mean first
+                        col_idx = list(X.columns).index(col)
+                        placeholder = np.zeros((1, len(X.columns)))
+                        placeholder[0, col_idx] = self.column_means[col]
+                        scaled_mean = self.scaler.transform(placeholder)[0, col_idx]
+                        X_scaled_df.loc[mean_needed_mask, col] = scaled_mean
+        
+        # Inverse transform the scaling for all values
+        X_result = self.scaler.inverse_transform(X_scaled_df)
+        X_result_df = pd.DataFrame(X_result, columns=X.columns, index=X.index)
+        
+        # Restore NaN values for skip columns
+        for col in self.skip_imputation_cols:
+            if col in X_out.columns:
+                X_result_df.loc[missing_mask[col], col] = np.nan
+        
+        return X_result_df
+    
 class NutritionScoreImputer(BaseEstimator, TransformerMixin):
     """Handle nutrition scores and grades with special logic."""
     def __init__(self):
@@ -342,16 +449,16 @@ def create_imputation_pipeline(category_mappings=None, max_iterations=3, converg
     
     # Nutrition features for KNN imputation
     nutrition_features = [
-        'energy_100g', 'fat_100g', 'saturated-fat_100g', 
-        'carbohydrates_100g', 'sugars_100g', 'fiber_100g',
-        'proteins_100g', 'salt_100g', 'nutrition-score-fr_100g'
+         'energy_100g', 'fat_100g', 'saturated-fat_100g', 'trans-fat_100g', 'cholesterol_100g',
+         'carbohydrates_100g', 'sugars_100g', 'fiber_100g', 'proteins_100g', 'salt_100g', 'sodium_100g',
+         'vitamin-a_100g', 'vitamin-c_100g', 'calcium_100g', 'iron_100g'
     ]
     
     # Pipeline for numerical features
     numerical_pipeline = Pipeline([
-        ('imputer', NumericalFeatureImputer())
+        ('imputer', MultiStageNumericalImputer())
     ])
-    
+        
     # Pipeline for nutrition scores/grades
     nutrition_pipeline = Pipeline([
         ('imputer', NutritionScoreImputer())
@@ -372,7 +479,7 @@ def create_imputation_pipeline(category_mappings=None, max_iterations=3, converg
         ('cleaner', NumericCleanupTransformer())
     ])
     
-    def impute_pnns_iteratively(df, iterations=3):
+    def impute_pnns_iteratively(df, iterations=2):
         """Iteratively impute PNNS groups starting with the most confident cases."""
         df_result = df.copy()
         
@@ -531,19 +638,21 @@ def create_imputation_pipeline(category_mappings=None, max_iterations=3, converg
                 dtype = str(df_result[col].dtype)
                 print(f"  - {col:<30} | {count:>8} missing ({percentage:.2f}%) | Type: {dtype}")
             
-            print("\nApplying final fallback strategy...")
-            
-            # Now apply the fallback strategy
-            df_result = df_result.ffill().bfill()
-            
-            for col in df_result.columns:
-                if df_result[col].isna().any():
-                    if pd.api.types.is_numeric_dtype(df_result[col]):
-                        df_result[col] = df_result[col].fillna(df_result[col].median())
-                    else:
-                        most_common = df_result[col].value_counts().index[0] if len(df_result[col].dropna()) > 0 else "unknown"
-                        df_result[col] = df_result[col].fillna(most_common)
-        
+            # # Optionally apply a final fallback strategy for remaining missing values
+            # # This could be a simple forward-fill, backward-fill, or median/mode imputation
+            # print("\nApplying final fallback strategy...")
+            # 
+            # # Now apply the fallback strategy
+            # df_result = df_result.ffill().bfill()
+            # 
+            # for col in df_result.columns:
+            #     if df_result[col].isna().any():
+            #         if pd.api.types.is_numeric_dtype(df_result[col]):
+            #             df_result[col] = df_result[col].fillna(df_result[col].median())
+            #         else:
+            #             most_common = df_result[col].value_counts().index[0] if len(df_result[col].dropna()) > 0 else "unknown"
+            #             df_result[col] = df_result[col].fillna(most_common)
+            #    
         # Force garbage collection
         gc.collect()
         
