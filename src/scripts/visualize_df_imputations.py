@@ -181,7 +181,7 @@ def plot_pnns_group_changes(df_before, df_after):
         path=['pnns_groups_1', 'pnns_groups_2'],
         values='count_after',
         color='pct_change_capped',
-        color_continuous_scale=['lightgreen', 'green', 'darkgreen'],  # Green scale for positive changes
+        color_continuous_scale='plasma',  # Changed to plasma colorscale
         range_color=[0, pct_change_cap],  # Only positive range
         title='PNNS Groups After Imputation',
         hover_data={
