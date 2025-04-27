@@ -125,101 +125,6 @@ def check_energy_macronutrients_relationship(df):
     
     return validation_result, df_validated
 
-def calculate_nutrient_correlations(df):
-    """Calculate correlation matrix for nutrient columns"""
-    # Get numerical columns
-    numerical_cols = df.select_dtypes(include=['number']).columns.tolist()
-    
-    # Filter to nutrient-related columns
-    nutrient_cols = [col for col in numerical_cols if any(x in col for x in ['energy', 'fat', 'protein', 'sugar', 'salt', 'sodium', 'carbo', 'fiber'])]
-    nutrient_cols = [col for col in nutrient_cols if col in df.columns]
-    
-    if len(nutrient_cols) < 2:
-        return None, nutrient_cols
-    
-    # Calculate correlation matrix
-    corr_df = df[nutrient_cols].corr()
-    return corr_df, nutrient_cols
-
-def analyze_category_nutrient_relationships(df, nutrient_cols):
-    """Analyze relationships between categorical variables and nutrients"""
-    cat_cols = ['pnns_groups_1', 'nutrition_grade_fr']
-    cat_cols = [col for col in cat_cols if col in df.columns]
-    
-    # Return empty if no categorical columns or nutrient columns
-    if len(cat_cols) == 0 or len(nutrient_cols) == 0:
-        return pd.DataFrame()
-    
-    cat_var = cat_cols[0]  # Use first available categorical column
-    
-    # Get top categories
-    top_categories = df[cat_var].value_counts().nlargest(6).index.tolist()
-    
-    # Select key nutrients to analyze
-    key_nutrients = ['energy_100g', 'fat_100g', 'proteins_100g', 'carbohydrates_100g', 'sugars_100g']
-    key_nutrients = [n for n in key_nutrients if n in df.columns]
-    
-    # Calculate statistics by category
-    cat_data = []
-    for category in top_categories:
-        subset = df[df[cat_var] == category]
-        for nutrient in key_nutrients:
-            if nutrient in df.columns:
-                cat_data.append({
-                    'Category': category,
-                    'Nutrient': nutrient,
-                    'Mean': subset[nutrient].mean(),
-                    'Median': subset[nutrient].median(),
-                    'Count': subset[nutrient].count()
-                })
-    
-    return pd.DataFrame(cat_data) if cat_data else pd.DataFrame()
-
-# VISUALIZATION FUNCTIONS
-def plot_correlation_matrix(corr_df):
-    """Visualize correlation matrix for nutrients"""
-    if corr_df is None:
-        fig = go.Figure()
-        fig.add_annotation(text="Not enough nutrient columns for correlation analysis",
-                          xref="paper", yref="paper", x=0.5, y=0.5, showarrow=False)
-        return fig
-    
-    fig = px.imshow(
-        corr_df,
-        text_auto='.2f',
-        aspect="auto",
-        color_continuous_scale='RdBu_r',
-        range_color=[-1, 1],
-        title="Nutrient Correlation Matrix"
-    )
-    
-    fig.update_layout(height=700, width=700, title_x=0.5)
-    return fig
-
-def plot_category_relationships(cat_nutrient_df):
-    """Visualize relationships between categories and nutrients"""
-    if cat_nutrient_df.empty:
-        fig = go.Figure()
-        fig.add_annotation(text="Not enough categorical data for analysis",
-                          xref="paper", yref="paper", x=0.5, y=0.5, showarrow=False)
-        return fig
-    
-    cat_var = cat_nutrient_df['Category'].iloc[0]
-    fig = px.bar(
-        cat_nutrient_df,
-        x='Category',
-        y='Mean',
-        color='Nutrient',
-        barmode='group',
-        title=f'Mean Nutrient Content by Category',
-        labels={'Mean': 'Mean Value', 'Category': cat_var},
-        hover_data=['Median', 'Count']
-    )
-    
-    fig.update_layout(height=500, title_x=0.5)
-    return fig
-
-
 # MAIN FUNCTIONS
 def validate_nutritional_relationships(df):
     """
@@ -252,44 +157,18 @@ def validate_nutritional_relationships(df):
     
     return validation_summary, df_validated
 
-def analyze_variable_dependencies(df):
-    """
-    Analyze relationships and dependencies between variables.
-    
-    Args:
-        df: DataFrame containing the nutritional data
-        
-    Returns:
-        tuple: (correlation_fig, categorical_relationship_fig)
-    """
-    # Calculate correlations between nutrients
-    corr_df, nutrient_cols = calculate_nutrient_correlations(df)
-    
-    # Analyze category-nutrient relationships
-    cat_nutrient_df = analyze_category_nutrient_relationships(df, nutrient_cols)
-    
-    # Create visualizations
-    corr_fig = plot_correlation_matrix(corr_df)
-    cat_fig = plot_category_relationships(cat_nutrient_df)
-    
-    return corr_fig, cat_fig
-
 def create_validation_dashboard(df):
     """
-    Create a complete validation dashboard for the dataset.
+    Create a validation dashboard for the dataset.
     
     Args:
         df: DataFrame containing the nutritional data
         
     Returns:
-        tuple: (validation_summary_df, df_validated, dashboard_fig)
+        tuple: (validation_summary_df, df_validated)
     """
     # Run validation
     validation_summary, df_validated = validate_nutritional_relationships(df)
     
-    
-    # Run dependency analysis
-    corr_fig, cat_fig = analyze_variable_dependencies(df)
-
-    
-    return validation_summary, df_validated, corr_fig, cat_fig
+    # Return just the validation summary and validated data
+    return validation_summary, df_validated
