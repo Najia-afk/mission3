@@ -8,15 +8,81 @@ from sklearn.decomposition import PCA
 from sklearn.cluster import KMeans, MiniBatchKMeans
 from sklearn.impute import SimpleImputer
 
-import numpy as np
-import pandas as pd
-import plotly.express as px
-import plotly.graph_objects as go
-from plotly.subplots import make_subplots
-from sklearn.preprocessing import StandardScaler
-from sklearn.decomposition import PCA
-from sklearn.cluster import KMeans, MiniBatchKMeans
-from sklearn.impute import SimpleImputer
+def find_optimal_components(df, numeric_cols=None, max_components=10, random_state=42):
+    """
+    Find optimal number of PCA components using elbow method.
+    
+    Args:
+        df: DataFrame with data
+        numeric_cols: List of numeric columns to analyze
+        max_components: Maximum number of components to test
+        random_state: Random state for reproducibility
+        
+    Returns:
+        tuple: (elbow_fig, explained_variance_ratios)
+    """
+    # Select numeric columns if not specified
+    if numeric_cols is None:
+        numeric_cols = df.select_dtypes(include=['number']).columns.tolist()
+        numeric_cols = [col for col in numeric_cols if 'score' not in col.lower() or col == 'nutrition-score-fr_100g']
+    
+    # Handle missing values and scale
+    imputer = SimpleImputer(strategy='median')
+    df_numeric = pd.DataFrame(
+        imputer.fit_transform(df[numeric_cols]), 
+        columns=numeric_cols
+    )
+    
+    scaler = StandardScaler()
+    scaled_data = scaler.fit_transform(df_numeric)
+    
+    # Calculate explained variance for different component counts
+    n_components = min(len(numeric_cols), max_components, len(df) - 1)
+    pca = PCA(random_state=random_state)
+    pca.fit(scaled_data)
+    
+    # Get cumulative explained variance
+    explained_variance = np.cumsum(pca.explained_variance_ratio_)
+    
+    # Create elbow plot
+    fig = go.Figure()
+    fig.add_trace(go.Scatter(
+        x=list(range(1, len(explained_variance) + 1)),
+        y=explained_variance,
+        mode='lines+markers',
+        name='Cumulative Explained Variance',
+        marker=dict(size=8)
+    ))
+    
+    # Add annotations for key variance thresholds
+    for threshold in [0.7, 0.8, 0.9]:
+        # Find first component that exceeds threshold
+        try:
+            n_comp = next(i+1 for i, v in enumerate(explained_variance) if v >= threshold)
+            fig.add_trace(go.Scatter(
+                x=[n_comp],
+                y=[explained_variance[n_comp-1]],
+                mode='markers',
+                marker=dict(size=12, symbol='star', color='red'),
+                name=f'{threshold*100:.0f}% Variance',
+                hoverinfo='text',
+                text=f'{n_comp} components explain {threshold*100:.0f}% variance'
+            ))
+        except StopIteration:
+            pass
+    
+    fig.update_layout(
+        title='PCA Elbow Method: Explained Variance by Number of Components',
+        xaxis_title='Number of Components',
+        yaxis_title='Cumulative Explained Variance',
+        yaxis=dict(range=[0, 1]),
+        height=500,
+        width=800,
+        showlegend=True
+    )
+    
+    return fig, pca.explained_variance_ratio_
+
 
 def visualize_nutrient_pca(df, numeric_cols=None, grade_col='nutrition_grade_fr', n_clusters=5, sample_size=None):
     """
@@ -45,7 +111,7 @@ def visualize_nutrient_pca(df, numeric_cols=None, grade_col='nutrition_grade_fr'
         pca_df, 
         n_clusters=n_clusters, 
         color_col=grade_col,
-        use_minibatch=(len(df) > 5000)  # Use minibatch for large datasets
+        use_minibatch=(len(df) > 10000)  # Use minibatch for large datasets
     )
     
     # Return all results
@@ -181,11 +247,11 @@ def perform_pca_analysis(df, numeric_cols=None, color_col='nutrition_grade_fr', 
     return pca_df, feature_importance, pca_fig, biplot_fig
 
 def create_biplot(pca, scaled_data, feature_names, pca_df, color_col, explained_variance):
-    """Create a biplot with minimal hover information."""
+    """Create a lightweight biplot without hover information."""
     
     fig = go.Figure()
     
-    # Add scatter points as a single trace if possible
+    # Add scatter points with minimal styling
     if color_col in pca_df.columns:
         # If categorical
         if pca_df[color_col].dtype == 'object' or pca_df[color_col].nunique() < 10:
@@ -194,7 +260,7 @@ def create_biplot(pca, scaled_data, feature_names, pca_df, color_col, explained_
                 'd': '#ee8100', 'e': '#e63e11'
             }
             
-            # Add traces for each nutrition grade
+            # Add traces for each nutrition grade - simplified
             for grade in sorted(pca_df[color_col].dropna().unique()):
                 subset = pca_df[pca_df[color_col] == grade]
                 
@@ -205,13 +271,13 @@ def create_biplot(pca, scaled_data, feature_names, pca_df, color_col, explained_
                     name=f'Grade {grade.upper()}' if grade in ['a', 'b', 'c', 'd', 'e'] else grade,
                     marker=dict(
                         color=color_discrete_map.get(grade.lower(), '#777777'),
-                        size=4,  # Even smaller points for biplot
+                        size=3,  # Smaller points
                         opacity=0.4
                     ),
-                    hoverinfo='none'  # No hover info
+                    hoverinfo='none'  # No hover
                 ))
         else:
-            # For numerical color column - simplified
+            # For numerical color column - completely simplified
             fig.add_trace(go.Scatter(
                 x=pca_df['PC1'],
                 y=pca_df['PC2'],
@@ -219,7 +285,7 @@ def create_biplot(pca, scaled_data, feature_names, pca_df, color_col, explained_
                 marker=dict(
                     color=pca_df[color_col],
                     colorscale='Viridis',
-                    size=4,
+                    size=3,
                     opacity=0.4,
                     colorbar=dict(title=color_col)
                 ),
@@ -227,12 +293,12 @@ def create_biplot(pca, scaled_data, feature_names, pca_df, color_col, explained_
                 name='Products'
             ))
     else:
-        # No color column - simplified
+        # No color column - completely simplified
         fig.add_trace(go.Scatter(
             x=pca_df['PC1'],
             y=pca_df['PC2'],
             mode='markers',
-            marker=dict(size=4, opacity=0.4),
+            marker=dict(size=3, opacity=0.4),
             hoverinfo='none',
             name='Products'
         ))
@@ -244,7 +310,7 @@ def create_biplot(pca, scaled_data, feature_names, pca_df, color_col, explained_
     loading_scale = np.abs(pca_df[['PC1', 'PC2']]).max().max() * 0.8 / np.abs(loadings).max().max()
     
     # Add feature vectors - only add text for the key features
-    top_features_idx = np.argsort(-np.abs(loadings).sum(axis=1))[:10]  # Top 10 most important features
+    top_features_idx = np.argsort(-np.abs(loadings).sum(axis=1))[:8]  # Top 8 most important features
     
     for i, feature in enumerate(feature_names):
         is_important = i in top_features_idx
@@ -258,25 +324,33 @@ def create_biplot(pca, scaled_data, feature_names, pca_df, color_col, explained_
             textposition='top center',
             textfont=dict(size=10, color='darkred'),
             name=feature,
-            hoverinfo='none'  # No hover
+            hoverinfo='none',  # No hover
+            showlegend=False  # Don't show lines in legend
         ))
     
-    # Update layout
+    # Update layout - simplified
     fig.update_layout(
-        title=f'Biplot: PCA with Feature Vectors<br><sup>Total Variance Explained: {sum(explained_variance):.1f}%</sup>',
+        title=f'PCA Biplot<br><sup>Variance: {sum(explained_variance):.1f}%</sup>',
         xaxis_title=f'PC1 ({explained_variance[0]:.1f}%)',
         yaxis_title=f'PC2 ({explained_variance[1]:.1f}%)',
         xaxis=dict(zeroline=True, zerolinewidth=1, zerolinecolor='grey'),
         yaxis=dict(zeroline=True, zerolinewidth=1, zerolinecolor='grey'),
-        height=700,
-        width=900,
-        legend_title=color_col if color_col in pca_df.columns else None
+        height=600,
+        width=800,
+        legend=dict(
+            itemsizing='constant',
+            font=dict(size=10),
+            yanchor="top",
+            y=0.99,
+            xanchor="right",
+            x=0.99
+        )
     )
     
     return fig
 
 def perform_kmeans_clustering(pca_df, n_clusters=5, color_col=None, use_minibatch=True):
-    """Perform clustering with optimized performance."""
+    """Perform simplified clustering with minimal visualization elements."""
     # Copy only necessary columns
     df_cluster = pca_df.copy()
     
@@ -291,10 +365,10 @@ def perform_kmeans_clustering(pca_df, n_clusters=5, color_col=None, use_minibatc
         
     df_cluster['Cluster'] = kmeans.fit_predict(df_cluster[pc_cols])
     
-    # Create figure with minimal hover info
+    # Create simplified figure with no hover
     cluster_fig = go.Figure()
     
-    # Add a trace for each cluster
+    # Add a trace for each cluster - simplified
     cluster_colors = px.colors.qualitative.Bold
     
     for i in range(n_clusters):
@@ -305,15 +379,15 @@ def perform_kmeans_clustering(pca_df, n_clusters=5, color_col=None, use_minibatc
             y=cluster_data['PC2'],
             mode='markers',
             marker=dict(
-                size=6,
+                size=4,
                 color=cluster_colors[i % len(cluster_colors)],
-                opacity=0.7
+                opacity=0.6  # Slightly more visible than biplot
             ),
             name=f'Cluster {i+1}',
-            hoverinfo='none'  # No hover info
+            hoverinfo='none'  # No hover
         ))
     
-    # Add cluster centers
+    # Add cluster centers - more visible
     centers = kmeans.cluster_centers_
     cluster_fig.add_trace(go.Scatter(
         x=centers[:, 0],
@@ -325,17 +399,25 @@ def perform_kmeans_clustering(pca_df, n_clusters=5, color_col=None, use_minibatc
             color='black',
             line=dict(width=2)
         ),
-        name='Cluster Centers',
+        name='Centers',  # Shorter name
         hoverinfo='none'
     ))
     
-    # Update layout
+    # Update layout - simplified
     cluster_fig.update_layout(
-        title='K-means Clustering of PCA Results',
+        title='K-means Clustering',
         xaxis_title='PC1',
         yaxis_title='PC2',
-        height=600,
-        width=900
+        height=550,
+        width=750,
+        legend=dict(
+            itemsizing='constant', 
+            font=dict(size=10),
+            yanchor="top",
+            y=0.99,
+            xanchor="right",
+            x=0.99
+        )
     )
     
     # Simplified comparison figure
@@ -349,13 +431,10 @@ def perform_kmeans_clustering(pca_df, n_clusters=5, color_col=None, use_minibatc
             x=cross_tab.columns,
             y=[f"Cluster {i+1}" for i in range(n_clusters)],
             color_continuous_scale="Viridis",
-            title=f"Comparing K-means Clusters with {color_col}"
+            title=f"Clusters vs {color_col}"
         )
         
-        comparison_fig.update_layout(
-            height=500,
-            width=700
-        )
+        comparison_fig.update_layout(height=450, width=650)
     
     return df_cluster, cluster_fig, comparison_fig
 
@@ -399,7 +478,6 @@ def create_feature_importance_plot(feature_importance):
     # Update layout - smaller plot
     fig.update_layout(
         height=200*n_display,  # Reduced height
-        width=800,
         title="Feature Importance in Principal Components",
     )
     
@@ -410,7 +488,8 @@ def create_feature_importance_plot(feature_importance):
     
     return fig
 
-def visualize_nutrient_pca(df, numeric_cols=None, grade_col='nutrition_grade_fr', n_clusters=5, sample_size=None):
+def visualize_nutrient_pca(df, numeric_cols=None, grade_col='nutrition_grade_fr', n_clusters=5, 
+                          sample_size=None, find_optimal_n_components=False, max_components=10):
     """
     Create optimized PCA and clustering analysis for nutritional data.
     
@@ -420,7 +499,20 @@ def visualize_nutrient_pca(df, numeric_cols=None, grade_col='nutrition_grade_fr'
         grade_col: Column with nutrition grades
         n_clusters: Number of clusters for K-means
         sample_size: Optional limit to sample size for large datasets
+        find_optimal_n_components: Whether to perform elbow analysis for optimal PCA components
+        max_components: Maximum number of components to test in elbow method
     """
+    results = {}
+    
+    # Find optimal number of components if requested
+    if find_optimal_n_components:
+        print("Finding optimal number of PCA components...")
+        elbow_fig, variance_ratios = find_optimal_components(
+            df, numeric_cols=numeric_cols, max_components=max_components
+        )
+        results['pca_elbow_fig'] = elbow_fig
+        results['explained_variance_ratios'] = variance_ratios
+    
     # Step 1: Perform PCA with sampling for large datasets
     pca_df, feature_importance, pca_fig, biplot_fig = perform_pca_analysis(
         df, 
@@ -440,8 +532,8 @@ def visualize_nutrient_pca(df, numeric_cols=None, grade_col='nutrition_grade_fr'
         use_minibatch=(len(df) > 10000)  # Use minibatch for large datasets
     )
     
-    # Return all results
-    return {
+    # Add all results
+    results.update({
         'pca_df': pca_df,
         'feature_importance': feature_importance,
         'pca_scatterplot': pca_fig,
@@ -450,4 +542,6 @@ def visualize_nutrient_pca(df, numeric_cols=None, grade_col='nutrition_grade_fr'
         'clustered_df': clustered_df,
         'cluster_plot': cluster_fig,
         'cluster_comparison': comparison_fig
-    }
+    })
+    
+    return results
