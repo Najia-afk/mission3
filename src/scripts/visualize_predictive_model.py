@@ -133,6 +133,7 @@ def plot_feature_importance(model, X_train, target_name, categorical_cols, numer
     
     # Get feature importances
     importances = model.named_steps['model'].feature_importances_
+    print(f"Number of importance values: {len(importances)}")
     
     # Get the preprocessing transformer
     preprocessor = model.named_steps['preprocessor']
@@ -142,39 +143,74 @@ def plot_feature_importance(model, X_train, target_name, categorical_cols, numer
     
     # Process categorical features if any exist
     if categorical_cols:
+        print(f"Processing categorical columns: {categorical_cols}")
         # Find the categorical transformer
         cat_transformer = None
+        cat_cols = []
         for name, transformer, cols in preprocessor.transformers_:
             if name == 'cat' and any(col in cols for col in categorical_cols):
                 cat_transformer = transformer
+                cat_cols = cols
+                print(f"Found categorical transformer with columns: {cols}")
                 break
         
         # If categorical transformer is found
         if cat_transformer is not None:
             # Try to get OneHotEncoder
             onehot_step = None
-            for step_name, step in cat_transformer.named_steps.items():
-                if hasattr(step, 'get_feature_names_out'):
-                    onehot_step = step
-                    break
+            
+            # First check if transformer is itself an encoder (not in a pipeline)
+            if isinstance(cat_transformer, OneHotEncoder):
+                onehot_step = cat_transformer
+                print("Categorical transformer is directly an OneHotEncoder")
+            else:
+                # Otherwise check within pipeline steps
+                try:
+                    for step_name, step in cat_transformer.named_steps.items():
+                        if isinstance(step, OneHotEncoder):
+                            onehot_step = step
+                            print(f"Found OneHotEncoder in step: {step_name}")
+                            break
+                except AttributeError:
+                    print("Categorical transformer doesn't have named_steps attribute")
             
             if onehot_step:
                 try:
-                    cat_feature_names = onehot_step.get_feature_names_out(categorical_cols)
-                    feature_names.extend(cat_feature_names)
-                except:
+                    print("Categories shape:", [len(cats) for cats in onehot_step.categories_])
+                    # Get proper category names from each categorical column
+                    for i, col in enumerate(cat_cols):
+                        if col in categorical_cols:
+                            print(f"Processing {col} at position {i}")
+                            # Get categories for this column
+                            categories = onehot_step.categories_[i]
+                            print(f"Found {len(categories)} categories for {col}: {categories[:5]}")
+                            # Create feature names like "pnns_groups_1=beverages"
+                            for category in categories:
+                                feature_names.append(f"{col}={category}")
+                except Exception as e:
+                    print(f"Error getting categorical feature names: {e}")
+                    # Fallback: use basic column names
                     feature_names.extend(categorical_cols)
             else:
+                print("No OneHotEncoder found in categorical transformer")
                 feature_names.extend(categorical_cols)
+        else:
+            print("No categorical transformer found")
+            feature_names.extend(categorical_cols)
     
     # Add numerical feature names
     feature_names.extend(numerical_cols)
+    print(f"Total feature names collected: {len(feature_names)}")
     
     # Ensure we have the right number of feature names
     if len(feature_names) > len(importances):
+        print(f"WARNING: More feature names ({len(feature_names)}) than importances ({len(importances)}). Trimming feature names.")
         feature_names = feature_names[:len(importances)]
     elif len(feature_names) < len(importances):
-        feature_names.extend([f"Feature_{i}" for i in range(len(feature_names), len(importances))])
+        print(f"WARNING: Fewer feature names ({len(feature_names)}) than importances ({len(importances)}). Adding generic names.")
+        # Try to make more meaningful names for extra features
+        for i in range(len(feature_names), len(importances)):
+            feature_names.append(f"Feature_{i}")
     
     # Create small DataFrame with only top features for visualization
     feature_importance = pd.DataFrame({
@@ -211,14 +247,18 @@ def plot_feature_importance(model, X_train, target_name, categorical_cols, numer
             font=dict(size=18)
         ),
         xaxis=dict(
-            title='Feature Importance',
-            titlefont=dict(size=14),
+            title=dict(
+                text='Feature Importance',
+                font=dict(size=14)
+            ),
             showgrid=True,
             gridcolor='rgba(0,0,0,0.1)'
         ),
         yaxis=dict(
-            title='Feature',
-            titlefont=dict(size=14),
+            title=dict(
+                text='Feature',
+                font=dict(size=14)
+            ),
             categoryorder='total ascending'
         ),
         template='plotly_white',
