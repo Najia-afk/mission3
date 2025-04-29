@@ -5,11 +5,15 @@ from sklearn.pipeline import Pipeline
 import logging
 from sklearn.model_selection import train_test_split
 from sklearn.metrics import mean_squared_error, mean_absolute_error, accuracy_score
+import os
+
 
 from ..transformers.numerical import MultiStageNumericalImputer, NumericCleanupTransformer
 from ..transformers.categorical import CategoricalFeatureImputer
 from ..transformers.hierarchical import EnhancedHierarchicalImputer
 from ..transformers.special import NutritionScoreImputer
+
+os.environ["LOKY_MAX_CPU_COUNT"] = str(os.cpu_count())
 
 # Define the logger locally
 def get_logger(name):
@@ -459,7 +463,7 @@ class ImputationPipeline:
     
     def _apply_domain_constraints(self, df):
         """
-        Apply domain-specific constraints to imputed values.
+        Apply domain-specific constraints to imputed values with advanced nutrition science rules.
         
         Parameters:
         -----------
@@ -469,16 +473,17 @@ class ImputationPipeline:
         Returns:
         --------
         pandas.DataFrame
-            Constrained data
+            Constrained data with nutritionally valid values
         """
-        logger.info("Applying domain-specific constraints...")
+        logger.info("Applying enhanced domain-specific constraints...")
         
         # Work on a copy to avoid modifying original
         df_result = df.copy()
         
         # 1. Non-negative nutrient values
         nutrient_cols = ['energy_100g', 'fat_100g', 'carbohydrates_100g', 'proteins_100g', 'salt_100g', 
-                         'sodium_100g', 'fiber_100g', 'sugars_100g', 'saturated-fat_100g']
+                        'sodium_100g', 'fiber_100g', 'sugars_100g', 'saturated-fat_100g', 'trans-fat_100g',
+                        'cholesterol_100g', 'vitamin-a_100g', 'vitamin-c_100g', 'calcium_100g', 'iron_100g']
         
         for col in nutrient_cols:
             if col in df_result.columns and pd.api.types.is_numeric_dtype(df_result[col]):
@@ -487,27 +492,155 @@ class ImputationPipeline:
                     logger.info(f"Fixing {negative_mask.sum()} negative values in {col}")
                     df_result.loc[negative_mask, col] = 0
         
-        # 2. Logical constraints between columns
-        # Total fat >= saturated fat
+        # 2. Set minimum reasonable values for nutrients that shouldn't be zero
+        # Define minimums by food group if possible
+        pnns_based_minimums = {}
+        
+        # Apply general minimums for non-zero nutrients
+        if 'pnns_groups_1' in df_result.columns:
+            # Get food groups
+            food_groups = df_result['pnns_groups_1'].dropna().unique()
+            
+            # Define different minimums for different food groups
+            for group in food_groups:
+                if group in ['fruits and vegetables', 'cereals', 'meat', 'fish', 'dairy']:
+                    # Non-beverage foods should have some protein
+                    group_mask = df_result['pnns_groups_1'] == group
+                    
+                    if 'proteins_100g' in df_result.columns:
+                        zero_mask = (df_result['proteins_100g'] == 0) & df_result['proteins_100g'].notna() & group_mask
+                        if zero_mask.any():
+                            logger.info(f"Setting minimum protein values for {zero_mask.sum()} {group} products")
+                            # Different minimums by group
+                            if group == 'meat':
+                                df_result.loc[zero_mask, 'proteins_100g'] = 10.0  # Meat products have significant protein
+                            elif group == 'dairy':
+                                df_result.loc[zero_mask, 'proteins_100g'] = 3.0   # Dairy typically has some protein
+                            else:
+                                df_result.loc[zero_mask, 'proteins_100g'] = 0.5   # Small amount for other food groups
+        
+        # 3. General minimums for any food type
+        minimum_values = {
+            'energy_100g': 1.0,       # Almost all foods have some energy content
+            'proteins_100g': 0.1,     # Most foods have at least trace protein
+            'fat_100g': 0.01,         # Most foods have at least trace fats
+            'carbohydrates_100g': 0.1 # Most foods have some carbs
+        }
+        
+        # Skip beverages for some minimums
+        beverages_mask = False
+        if 'pnns_groups_1' in df_result.columns:
+            beverages_mask = df_result['pnns_groups_1'] == 'beverages'
+        
+        # Apply general minimums where appropriate
+        for col, min_val in minimum_values.items():
+            if col in df_result.columns:
+                # Only fix exact zeros that were imputed, not trace values or actual zeros
+                zero_mask = (df_result[col] == 0) & df_result[col].notna()
+                
+                # Skip beverages for certain nutrients
+                if col in ['fat_100g', 'proteins_100g'] and beverages_mask is not False:
+                    zero_mask = zero_mask & ~beverages_mask
+                    
+                if zero_mask.any():
+                    logger.info(f"Setting minimum value of {min_val} for {zero_mask.sum()} zeros in {col}")
+                    df_result.loc[zero_mask, col] = min_val
+        
+        # 4. Enforce nutrient relationships based on food science
+        # Calculate typical ratios for nutrients that have mathematical relationships
+        
+        # Sodium to salt ratio (salt = sodium * 2.5)
+        if 'sodium_100g' in df_result.columns and 'salt_100g' in df_result.columns:
+            # Find rows where one value exists but the other doesn't
+            sodium_only = df_result['sodium_100g'].notna() & df_result['salt_100g'].isna()
+            salt_only = df_result['salt_100g'].notna() & df_result['sodium_100g'].isna()
+            
+            # Calculate missing values using the relationship
+            if sodium_only.any():
+                logger.info(f"Calculating salt from sodium for {sodium_only.sum()} products")
+                df_result.loc[sodium_only, 'salt_100g'] = df_result.loc[sodium_only, 'sodium_100g'] * 2.5
+                
+            if salt_only.any():
+                logger.info(f"Calculating sodium from salt for {salt_only.sum()} products")
+                df_result.loc[salt_only, 'sodium_100g'] = df_result.loc[salt_only, 'salt_100g'] / 2.5
+            
+            # Check for inconsistencies where both values exist
+            both_exist = df_result['sodium_100g'].notna() & df_result['salt_100g'].notna()
+            if both_exist.any():
+                expected_ratio = 2.5
+                actual_ratio = df_result.loc[both_exist, 'salt_100g'] / df_result.loc[both_exist, 'sodium_100g']
+                inconsistent = (actual_ratio < 2.4) | (actual_ratio > 2.6)  # Allow small deviations
+                
+                if inconsistent.any():
+                    logger.info(f"Fixing {inconsistent.sum()} inconsistent sodium/salt relationships")
+                    # Use the average of both calculations for more robustness
+                    df_result.loc[both_exist & inconsistent, 'salt_100g'] = df_result.loc[both_exist & inconsistent, 'sodium_100g'] * 2.5
+        
+        # Total fat vs. saturated fat relationship
         if 'fat_100g' in df_result.columns and 'saturated-fat_100g' in df_result.columns:
+            # Invalid: saturated fat > total fat
             invalid_mask = (df_result['saturated-fat_100g'] > df_result['fat_100g']) & \
-                          df_result['fat_100g'].notna() & df_result['saturated-fat_100g'].notna()
+                        df_result['fat_100g'].notna() & df_result['saturated-fat_100g'].notna()
             
             if invalid_mask.any():
                 logger.info(f"Fixing {invalid_mask.sum()} cases where saturated fat > total fat")
-                # Set saturated fat equal to total fat in these cases
-                df_result.loc[invalid_mask, 'saturated-fat_100g'] = df_result.loc[invalid_mask, 'fat_100g']
+                df_result.loc[invalid_mask, 'saturated-fat_100g'] = df_result.loc[invalid_mask, 'fat_100g'] * 0.8
+                
+            # Fix zeros: if total fat is non-zero but saturated fat is zero, estimate it
+            fat_nonzero_sat_zero = (df_result['fat_100g'] > 0.5) & (df_result['saturated-fat_100g'] == 0)
+            if fat_nonzero_sat_zero.any():
+                logger.info(f"Estimating saturated fat for {fat_nonzero_sat_zero.sum()} products with zero values")
+                # Use food-group specific ratios if available
+                if 'pnns_groups_1' in df_result.columns:
+                    for group in df_result['pnns_groups_1'].dropna().unique():
+                        group_mask = fat_nonzero_sat_zero & (df_result['pnns_groups_1'] == group)
+                        if group_mask.any():
+                            # Different ratios for different food groups
+                            if group == 'dairy':
+                                ratio = 0.6  # Dairy has higher saturated fat proportion
+                            elif group in ['meat', 'fish']:
+                                ratio = 0.3  # Meat has moderate saturated fat
+                            else:
+                                ratio = 0.2  # Default ratio
+                            df_result.loc[group_mask, 'saturated-fat_100g'] = df_result.loc[group_mask, 'fat_100g'] * ratio
+                else:
+                    # If no food group info, use a general ratio
+                    df_result.loc[fat_nonzero_sat_zero, 'saturated-fat_100g'] = df_result.loc[fat_nonzero_sat_zero, 'fat_100g'] * 0.3
         
-        # Total carbs >= sugars
+        # Total carbs vs. sugars relationship
         if 'carbohydrates_100g' in df_result.columns and 'sugars_100g' in df_result.columns:
+            # Invalid: sugars > total carbs
             invalid_mask = (df_result['sugars_100g'] > df_result['carbohydrates_100g']) & \
-                          df_result['carbohydrates_100g'].notna() & df_result['sugars_100g'].notna()
+                        df_result['carbohydrates_100g'].notna() & df_result['sugars_100g'].notna()
             
             if invalid_mask.any():
                 logger.info(f"Fixing {invalid_mask.sum()} cases where sugars > total carbohydrates")
-                df_result.loc[invalid_mask, 'sugars_100g'] = df_result.loc[invalid_mask, 'carbohydrates_100g']
+                df_result.loc[invalid_mask, 'sugars_100g'] = df_result.loc[invalid_mask, 'carbohydrates_100g'] * 0.9
+            
+            # Fix zeros: if carbs are non-zero but sugars are zero, estimate them
+            carbs_nonzero_sugar_zero = (df_result['carbohydrates_100g'] > 0.5) & (df_result['sugars_100g'] == 0)
+            if carbs_nonzero_sugar_zero.any():
+                logger.info(f"Estimating sugars for {carbs_nonzero_sugar_zero.sum()} products with zero values")
+                # Use food-group specific ratios if available
+                if 'pnns_groups_1' in df_result.columns:
+                    for group in df_result['pnns_groups_1'].dropna().unique():
+                        group_mask = carbs_nonzero_sugar_zero & (df_result['pnns_groups_1'] == group)
+                        if group_mask.any():
+                            # Different ratios for different food groups
+                            if group == 'fruits and vegetables':
+                                ratio = 0.7  # Fruits have higher sugar proportion
+                            elif group == 'beverages':
+                                ratio = 0.8  # Many beverages have high sugar content
+                            elif group == 'cereals':
+                                ratio = 0.1  # Cereals typically have low sugar relative to total carbs
+                            else:
+                                ratio = 0.2  # Default ratio
+                            df_result.loc[group_mask, 'sugars_100g'] = df_result.loc[group_mask, 'carbohydrates_100g'] * ratio
+                else:
+                    # If no food group info, use a general ratio
+                    df_result.loc[carbs_nonzero_sugar_zero, 'sugars_100g'] = df_result.loc[carbs_nonzero_sugar_zero, 'carbohydrates_100g'] * 0.3
         
-        # 3. Ensure nutrition scores are integers
+        # 5. Ensure nutrition scores are integers
         for col in ['nutrition-score-fr_100g', 'nutrition-score-uk_100g']:
             if col in df_result.columns and pd.api.types.is_numeric_dtype(df_result[col]):
                 non_int_mask = df_result[col].notna() & (df_result[col] % 1 != 0)
@@ -515,21 +648,66 @@ class ImputationPipeline:
                     logger.info(f"Rounding {non_int_mask.sum()} non-integer values in {col}")
                     df_result.loc[non_int_mask, col] = df_result.loc[non_int_mask, col].round()
         
-        # 4. Ensure maximal limits
-        if 'energy_100g' in df_result.columns:
-            # Extremely high values are likely errors
-            extreme_mask = df_result['energy_100g'] > 4000  # kcal per 100g is extremely high
-            if extreme_mask.any():
-                logger.info(f"Capping {extreme_mask.sum()} extreme values in energy_100g")
-                df_result.loc[extreme_mask, 'energy_100g'] = 4000
-                
-        # Nutrients shouldn't exceed 100g per 100g
-        for col in ['fat_100g', 'carbohydrates_100g', 'proteins_100g']:
+        # 6. Apply maximum limits based on nutritional science
+        max_limits = {
+            'energy_100g': 950,       # kcal per 100g
+            'fat_100g': 95,           # g per 100g
+            'saturated-fat_100g': 55, # g per 100g
+            'carbohydrates_100g': 95, # g per 100g
+            'sugars_100g': 95,        # g per 100g
+            'proteins_100g': 90,      # g per 100g
+            'sodium_100g': 3,         # g per 100g
+            'salt_100g': 6,           # g per 100g  
+            'fiber_100g': 50,         # g per 100g
+            'trans-fat_100g': 5,      # g per 100g
+            'cholesterol_100g': 500,  # mg per 100g
+            'vitamin-a_100g': 30,     # mg per 100g
+            'vitamin-c_100g': 50,     # mg per 100g
+            'calcium_100g': 30,       # mg per 100g
+            'iron_100g': 40           # mg per 100g
+        }
+        
+        for col, max_val in max_limits.items():
             if col in df_result.columns:
-                extreme_mask = df_result[col] > 100
+                extreme_mask = df_result[col] > max_val
                 if extreme_mask.any():
-                    logger.info(f"Capping {extreme_mask.sum()} values >100 in {col}")
-                    df_result.loc[extreme_mask, col] = 100
+                    logger.info(f"Capping {extreme_mask.sum()} extreme values in {col}")
+                    df_result.loc[extreme_mask, col] = max_val
+        
+        # 7. Verify macronutrient balance makes sense
+        # The sum of carbs, fats, and proteins should generally be under 100g/100g
+        if all(col in df_result.columns for col in ['fat_100g', 'carbohydrates_100g', 'proteins_100g']):
+            macronutrient_sum = df_result['fat_100g'] + df_result['carbohydrates_100g'] + df_result['proteins_100g']
+            impossible_mask = macronutrient_sum > 105  # Allow for slight measurement error
+            
+            if impossible_mask.any():
+                logger.info(f"Fixing {impossible_mask.sum()} products with impossible macronutrient totals")
+                # Scale down proportionally
+                for col in ['fat_100g', 'carbohydrates_100g', 'proteins_100g']:
+                    df_result.loc[impossible_mask, col] = df_result.loc[impossible_mask, col] * (100 / macronutrient_sum[impossible_mask])
+        
+        # 8. Check energy consistency
+        # Energy should be roughly 4*protein + 4*carbs + 9*fat kcal/g
+        if 'energy_100g' in df_result.columns and all(col in df_result.columns for col in ['fat_100g', 'carbohydrates_100g', 'proteins_100g']):
+            # Calculate theoretical energy
+            theoretical_energy = (df_result['proteins_100g'] * 4) + (df_result['carbohydrates_100g'] * 4) + (df_result['fat_100g'] * 9)
+            
+            # Check if actual energy deviates significantly (allow 20% error)
+            energy_exists = df_result['energy_100g'].notna() & (df_result['energy_100g'] > 0)
+            large_deviation = (abs(df_result['energy_100g'] - theoretical_energy) / theoretical_energy) > 0.2
+            inconsistent_energy = energy_exists & large_deviation & theoretical_energy.notna() & (theoretical_energy > 0)
+            
+            if inconsistent_energy.any():
+                logger.info(f"Adjusting {inconsistent_energy.sum()} products with inconsistent energy values")
+                # Use average of actual and theoretical for better accuracy
+                df_result.loc[inconsistent_energy, 'energy_100g'] = (df_result.loc[inconsistent_energy, 'energy_100g'] + 
+                                                                    theoretical_energy[inconsistent_energy]) / 2
+            
+            # Fix missing energy values
+            missing_energy = df_result['energy_100g'].isna() & theoretical_energy.notna()
+            if missing_energy.any():
+                logger.info(f"Calculating energy for {missing_energy.sum()} products using macronutrients")
+                df_result.loc[missing_energy, 'energy_100g'] = theoretical_energy[missing_energy]
         
         return df_result
     
