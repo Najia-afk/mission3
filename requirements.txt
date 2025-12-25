@@ -1,0 +1,12 @@
+pandas
+numpy
+matplotlib
+seaborn
+plotly
+missingno
+scikit-learn
+fuzzywuzzy
+python-Levenshtein
+ipykernel
+jupyterlab
+nbconvert
