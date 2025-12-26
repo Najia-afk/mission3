@@ -6,6 +6,7 @@ import logging
 from sklearn.model_selection import train_test_split
 from sklearn.metrics import mean_squared_error, mean_absolute_error, accuracy_score
 import os
+from tqdm.auto import tqdm
 
 
 from ..transformers.numerical import MultiStageNumericalImputer, NumericCleanupTransformer
@@ -49,12 +50,14 @@ class ImputationPipeline:
                 hierarchical_cols=None,
                 nutrition_features=None,
                 category_mappings=None,
-                max_iterations=3,
+                max_iterations=2,
                 convergence_threshold=0.1,
                 pnns_iterations=2,
                 validate_quality=True,
                 confidence_thresholds=None,
-                apply_constraints=True):
+                apply_constraints=True,
+                verbose=1,
+                n_jobs=-1):
         """
         Initialize the imputation pipeline with customizable parameters.
         
@@ -80,6 +83,10 @@ class ImputationPipeline:
             Confidence thresholds for different imputation levels
         apply_constraints : bool, default=True
             Whether to apply domain-specific constraints
+        verbose : int, default=1
+            Verbosity level (0: silent, 1: summary, 2: detailed)
+        n_jobs : int, default=-1
+            Number of parallel jobs to run for estimators that support it
         """
         # Initialize configuration
         self.special_cols = special_cols or DEFAULT_SPECIAL_COLS
@@ -91,6 +98,8 @@ class ImputationPipeline:
         self.pnns_iterations = pnns_iterations
         self.validate_quality = validate_quality
         self.apply_constraints = apply_constraints
+        self.verbose = verbose
+        self.n_jobs = n_jobs
         
         # Confidence thresholds for progressive imputation
         self.confidence_thresholds = confidence_thresholds or {
@@ -110,7 +119,7 @@ class ImputationPipeline:
         """Initialize the component pipelines."""
         # Pipeline for numerical features
         self.numerical_pipeline = Pipeline([
-            ('imputer', MultiStageNumericalImputer())
+            ('imputer', MultiStageNumericalImputer(verbose=self.verbose, n_jobs=self.n_jobs))
         ])
             
         # Pipeline for nutrition scores/grades
@@ -125,7 +134,7 @@ class ImputationPipeline:
         
         # Pipeline for other categorical features
         self.categorical_pipeline = Pipeline([
-            ('imputer', CategoricalFeatureImputer(self.category_mappings))
+            ('imputer', CategoricalFeatureImputer(self.category_mappings, n_jobs=self.n_jobs))
         ])
         
         # Final cleanup transformer
@@ -202,7 +211,8 @@ class ImputationPipeline:
             logger.warning("Dataset too small for reliable cross-validation")
             return {}
             
-        logger.info("Starting imputation quality validation via cross-validation...")
+        if self.verbose > 0:
+            print("🔍 Validating imputation quality...")
         
         # Make a copy to avoid modifying original
         df_copy = df.copy()
@@ -302,7 +312,8 @@ class ImputationPipeline:
                 logger.warning("No columns have sufficient non-missing values for relationship analysis")
                 return {}
             
-            logger.info(f"Analyzing relationships between {len(analyzable_cols)} columns...")
+            if self.verbose > 0:
+                print("🧠 Analyzing feature relationships...")
             
             # Sample to speed up analysis if dataframe is large
             df_sample = df.sample(min(5000, len(df)), random_state=42)
@@ -332,9 +343,9 @@ class ImputationPipeline:
                 # Train model based on data type
                 try:
                     if pd.api.types.is_numeric_dtype(y):
-                        model = RandomForestRegressor(n_estimators=50, max_depth=5, random_state=42)
+                        model = RandomForestRegressor(n_estimators=50, max_depth=5, random_state=42, n_jobs=self.n_jobs)
                     else:
-                        model = RandomForestClassifier(n_estimators=50, max_depth=5, random_state=42)
+                        model = RandomForestClassifier(n_estimators=50, max_depth=5, random_state=42, n_jobs=self.n_jobs)
                     
                     model.fit(X, y)
                     
@@ -381,7 +392,8 @@ class ImputationPipeline:
             from sklearn.preprocessing import StandardScaler
             from sklearn.metrics import silhouette_score
             
-            logger.info("Stratifying data for targeted imputation...")
+            if self.verbose > 0:
+                print("🎯 Creating data strata...")
             
             # Select numerical columns with low missingness
             numeric_cols = df.select_dtypes(include=['number']).columns
@@ -408,51 +420,47 @@ class ImputationPipeline:
             
             # Find optimal number of clusters
             best_score = -1
-            best_n = 2
+            best_n = 3 # Default to 3 if silhouette is too slow
             
-            for n_clusters in range(2, min(10, len(complete_cases)//100)):
-                try:
-                    kmeans = KMeans(n_clusters=n_clusters, random_state=42, n_init=10)
-                    clusters = kmeans.fit_predict(X_scaled)
-                    score = silhouette_score(X_scaled, clusters)
-                    if score > best_score:
-                        best_score = score
-                        best_n = n_clusters
-                except Exception as e:
-                    logger.warning(f"Error testing {n_clusters} clusters: {str(e)}")
-                    continue
+            # Only do silhouette if dataset is small enough or we have time
+            if len(complete_cases) < 2000:
+                for n_clusters in range(2, min(6, len(complete_cases)//100)):
+                    try:
+                        kmeans = KMeans(n_clusters=n_clusters, random_state=42, n_init=5)
+                        clusters = kmeans.fit_predict(X_scaled)
+                        score = silhouette_score(X_scaled, clusters)
+                        if score > best_score:
+                            best_score = score
+                            best_n = n_clusters
+                    except Exception:
+                        continue
             
             # Apply best clustering
             kmeans = KMeans(n_clusters=best_n, random_state=42, n_init=10)
             kmeans.fit(X_scaled)
             
-            # Function to predict cluster for any row (handles missing values)
-            def predict_cluster(row):
-                if row[candidate_cols].isna().any():
-                    # Impute missing values with means for prediction
-                    row_imputed = row[candidate_cols].copy()
-                    for col in candidate_cols:
-                        if pd.isna(row_imputed[col]):
-                            row_imputed[col] = complete_cases[col].mean()
-                    
-                    # Scale and predict - FIX: Convert to numpy array consistently
-                    X_row = row_imputed.values.reshape(1, -1)
-                    X_row_scaled = scaler.transform(X_row)
-                    return kmeans.predict(X_row_scaled)[0]
-                else:
-                    # Scale and predict - FIX: Convert to numpy array consistently
-                    X_row = row[candidate_cols].values.reshape(1, -1)
-                    X_row_scaled = scaler.transform(X_row)
-                    return kmeans.predict(X_row_scaled)[0]
+            # Vectorized prediction (much faster than apply axis=1)
+            # 1. Get the data for candidate columns
+            X_to_predict = df[candidate_cols].copy()
             
-            # Apply to get cluster for all rows
-            strata = df.apply(predict_cluster, axis=1)
+            # 2. Fill missing values with means from complete cases
+            means = complete_cases.mean()
+            X_to_predict = X_to_predict.fillna(means)
+            
+            # 3. Scale and predict
+            X_to_predict_scaled = scaler.transform(X_to_predict.values)
+            strata_labels = kmeans.predict(X_to_predict_scaled)
+            
+            # 4. Convert to Series with original index
+            strata = pd.Series(strata_labels, index=df.index)
             
             # Count samples per stratum
             stratum_counts = strata.value_counts()
-            logger.info(f"Created {len(stratum_counts)} strata: {dict(stratum_counts)}")
+            if self.verbose > 0:
+                print(f"  Created {len(stratum_counts)} strata for targeted imputation.")
             
             return strata
+
             
         except ImportError:
             logger.warning("KMeans not available - skipping stratification")
@@ -733,12 +741,9 @@ class ImputationPipeline:
         if not pnns_cols:
             return df_result
             
-        logger.info(f"Starting PNNS iterative imputation. Missing values: {df_result[pnns_cols].isna().sum().sum()}")
-        
         # Filter to only available nutrition features
         available_features = [f for f in self.nutrition_features if f in df_result.columns]
         if not available_features:
-            logger.info("No nutrition features available for KNN imputation.")
             return df_result
         
         # If we have feature relationships, use them to select the best predictors
@@ -752,29 +757,25 @@ class ImputationPipeline:
             available_features = list(set(available_features).union(
                 set([f for f in best_features if f in df_result.columns])))
             
-            logger.info(f"Using {len(available_features)} features for PNNS imputation based on feature relationships")
-        
         # Progressive imputation with confidence tracking
         confidence = pd.DataFrame(index=df_result.index, 
                                  columns=pnns_cols,
                                  data=np.nan)
             
         for iteration in range(self.pnns_iterations):
-            logger.info(f"PNNS Iteration {iteration+1}/{self.pnns_iterations}")
-            
             # 1. Find products with the most features present (most context)
             feature_counts = df_result[available_features].notna().sum(axis=1)
             feature_threshold = np.percentile(feature_counts, 50 + iteration*15)  # Gradually lower threshold
             
             # 2. Focus on products with more context first
             focus_mask = feature_counts >= feature_threshold
-            logger.info(f"Focusing on {focus_mask.sum()} products with at least {feature_threshold} nutrition features")
             
             # 3. Apply imputation to this subset
             imputer = CategoricalFeatureImputer(
                 min_samples_for_knn=20, 
                 knn_neighbors=5, 
-                numerical_features=available_features
+                numerical_features=available_features,
+                n_jobs=self.n_jobs
             )
             
             # 4. Get subset to process in this iteration
@@ -785,7 +786,6 @@ class ImputationPipeline:
                 for col in pnns_cols:
                     na_mask = df_subset[col].isna()
                     if na_mask.any():
-                        logger.info(f"Imputing {col} for subset...")
                         imputer.fit(df_subset)
                         df_subset = imputer.transform(df_subset)
                         
@@ -796,15 +796,10 @@ class ImputationPipeline:
                 
                 # 6. Update the main dataframe with imputed values
                 df_result.loc[focus_mask] = df_subset
-            
-            # 7. Report progress
-            missing_now = df_result[pnns_cols].isna().sum().sum()
-            logger.info(f"Missing PNNS values after iteration {iteration+1}: {missing_now}")
         
         # Final pass for any remaining missing values using all available data
         remaining_na = df_result[pnns_cols].isna().sum().sum()
         if remaining_na > 0:
-            logger.info(f"Final pass: Imputing remaining {remaining_na} missing PNNS values...")
             imputer = CategoricalFeatureImputer(
                 numerical_features=available_features,
                 min_samples_for_knn=5
@@ -822,7 +817,6 @@ class ImputationPipeline:
                 if na_mask[col].any():
                     confidence.loc[na_mask[col], col] = 0.3  # Low confidence
         
-        logger.info(f"Final missing PNNS values: {df_result[pnns_cols].isna().sum().sum()}")
         return df_result
     
     def fit_transform(self, df, skip_validation=False):
@@ -843,48 +837,52 @@ class ImputationPipeline:
             Imputed DataFrame
         """
         logger.info(f"Starting enhanced imputation on DataFrame with shape: {df.shape}")
-        logger.info(f"Missing values before imputation: {df.isna().sum().sum()}")
         
+        # Track missing values for convergence checking
+        initial_missing = df.isna().sum().sum()
+        previous_missing = initial_missing
+        
+        if self.verbose > 0:
+            print(f"🚀 Starting Imputation Pipeline (Shape: {df.shape})")
+            print(f"📊 Initial missing values: {initial_missing}")
+
         # Validate quality if requested and not already doing validation
         if self.validate_quality and not skip_validation and len(df) >= 1000:
             quality_metrics = self._validate_imputation_quality(df)
-            if quality_metrics:
-                logger.info("Imputation quality validation results:")
-                for col, metrics in quality_metrics.items():
-                    metric_str = ", ".join([f"{k}: {v:.4f}" for k, v in metrics.items()])
-                    logger.info(f"  {col}: {metric_str}")
         
         # Analyze feature relationships to guide imputation
-        logger.info("Analyzing feature relationships...")
         self.feature_relationships = self._compute_feature_relationships(df)
         
         # Try to stratify data for better targeted imputation
-        logger.info("Creating data strata for targeted imputation...")
         self.strata = self._stratify_imputation(df)
         
         # Create confidence tracking dataframe
         confidence = pd.DataFrame(1.0, index=df.index, columns=df.columns)
-        confidence[df.isna()] = np.nan  # Only track confidence for imputed values
+        confidence[df.isna()] = np.nan
         
         # Copy data to avoid modifying the original
         df_result = df.copy()
         
-        # Track missing values for convergence checking
-        previous_missing = df_result.isna().sum().sum()
-        initial_missing = previous_missing
+        # Total steps for progress bar
+        total_stages = len(self.confidence_thresholds)
+        
+        # Main progress bar
+        pbar = tqdm(total=total_stages * self.max_iterations, desc="Imputing", disable=self.verbose == 0)
         
         # Iterative imputation loop with confidence levels
         for confidence_level, threshold in self.confidence_thresholds.items():
-            logger.info(f"=== Starting {confidence_level} confidence imputation (threshold: {threshold}) ===")
+            if self.verbose > 0:
+                print(f"✨ Stage: {confidence_level.capitalize()} imputation (threshold: {threshold})")
+            
+            pbar.set_description(f"Stage: {confidence_level.capitalize()} (thr={threshold})")
             
             # Track progress within this confidence level
             conf_previous_missing = df_result.isna().sum().sum()
             
             # Iterative imputation loop
             for iteration in range(self.max_iterations):
-                logger.info(f"Iteration {iteration+1}/{self.max_iterations} ({confidence_level} confidence)")
-                
-                # Apply different imputation strategies based on data types
+                if self.verbose > 0:
+                    print(f"  Iteration {iteration+1}/{self.max_iterations}")
                 
                 # 1. Apply numerical imputation
                 numerical_cols = df_result.select_dtypes(include=['number']).columns.tolist()
@@ -893,15 +891,15 @@ class ImputationPipeline:
                         numerical_cols.remove(col)
                         
                 if numerical_cols and self.strata is not None and not df_result[numerical_cols].isna().sum().sum() == 0:
-                    logger.info(f"Processing numerical columns with stratified approach...")
-                    
                     # Impute each stratum separately for better results
+                    if self.verbose > 0:
+                        print(f"    Processing {len(self.strata.unique())} data strata...")
+                    
                     for stratum in sorted(self.strata.unique()):
                         stratum_mask = self.strata == stratum
-                        if stratum_mask.sum() > 20:  # Only if enough samples
+                        if stratum_mask.sum() > 20:
                             stratum_df = df_result.loc[stratum_mask]
                             if stratum_df[numerical_cols].isna().sum().sum() > 0:
-                                logger.info(f"  Imputing stratum {stratum} with {stratum_mask.sum()} samples")
                                 imputed_nums, num_confidence = self._impute_with_confidence(
                                     stratum_df[numerical_cols], 
                                     self.numerical_pipeline,
@@ -910,7 +908,6 @@ class ImputationPipeline:
                                 df_result.loc[stratum_mask, numerical_cols] = imputed_nums
                                 confidence.loc[stratum_mask, numerical_cols] = num_confidence
                 elif numerical_cols and not df_result[numerical_cols].isna().sum().sum() == 0:
-                    logger.info("Processing numerical columns...")
                     imputed_nums, num_confidence = self._impute_with_confidence(
                         df_result[numerical_cols], 
                         self.numerical_pipeline,
@@ -922,7 +919,6 @@ class ImputationPipeline:
                 # 2. Apply nutrition score imputation
                 nutrition_cols = [col for col in self.special_cols if col in df_result.columns]
                 if nutrition_cols and not df_result[nutrition_cols].isna().sum().sum() == 0:
-                    logger.info("Processing nutrition scores and grades...")
                     imputed_nutr, nutr_confidence = self._impute_with_confidence(
                         df_result[nutrition_cols], 
                         self.nutrition_pipeline,
@@ -931,10 +927,9 @@ class ImputationPipeline:
                     df_result[nutrition_cols] = imputed_nutr
                     confidence.loc[:, nutrition_cols] = nutr_confidence
                 
-                # 3. Apply hierarchical imputation for available mappings
+                # 3. Apply hierarchical imputation
                 hier_cols = [col for col in self.hierarchical_cols if col in df_result.columns]
                 if hier_cols and not df_result[hier_cols].isna().sum().sum() == 0:
-                    logger.info("Applying hierarchical imputation...")
                     imputed_hier, hier_confidence = self._impute_with_confidence(
                         df_result[hier_cols], 
                         self.hierarchical_pipeline,
@@ -943,28 +938,22 @@ class ImputationPipeline:
                     df_result[hier_cols] = imputed_hier
                     confidence.loc[:, hier_cols] = hier_confidence
                     
-                    # 3.1 Apply iterative PNNS imputation for remaining missing values
                     if df_result[hier_cols].isna().sum().sum() > 0:
-                        logger.info("Applying iterative KNN imputation for PNNS groups...")
                         df_result = self.impute_pnns_iteratively(df_result)
                 
-                # 4. Apply categorical imputation for non-hierarchical columns
+                # 4. Apply categorical imputation
                 categorical_cols = df_result.select_dtypes(include=['object', 'category']).columns.tolist()
                 for col in self.hierarchical_cols:
                     if col in categorical_cols:
                         categorical_cols.remove(col)
                         
                 if categorical_cols and not df_result[categorical_cols].isna().sum().sum() == 0:
-                    logger.info("Processing remaining categorical columns...")
-                    
                     if self.strata is not None:
-                        # Process by stratum if feasible
                         for stratum in sorted(self.strata.unique()):
                             stratum_mask = self.strata == stratum
-                            if stratum_mask.sum() > 30:  # Only if enough samples
+                            if stratum_mask.sum() > 30:
                                 stratum_df = df_result.loc[stratum_mask]
                                 if stratum_df[categorical_cols].isna().sum().sum() > 0:
-                                    logger.info(f"  Imputing categorical vars for stratum {stratum}")
                                     imputed_cats, cat_confidence = self._impute_with_confidence(
                                         stratum_df[categorical_cols], 
                                         self.categorical_pipeline,
@@ -973,7 +962,6 @@ class ImputationPipeline:
                                     df_result.loc[stratum_mask, categorical_cols] = imputed_cats
                                     confidence.loc[stratum_mask, categorical_cols] = cat_confidence
                     else:
-                        # Process all together
                         imputed_cats, cat_confidence = self._impute_with_confidence(
                             df_result[categorical_cols], 
                             self.categorical_pipeline,
@@ -982,70 +970,62 @@ class ImputationPipeline:
                         df_result[categorical_cols] = imputed_cats
                         confidence.loc[:, categorical_cols] = cat_confidence
                 
-                # 5. Apply domain constraints if configured
+                # 5. Apply domain constraints
                 if self.apply_constraints:
                     df_result = self._apply_domain_constraints(df_result)
                 
                 # Check convergence
                 current_missing = df_result.isna().sum().sum()
                 improvement = previous_missing - current_missing
-                improvement_percentage = (improvement / initial_missing * 100) if initial_missing > 0 else 0
                 
-                logger.info(f"Missing values after iteration {iteration+1}: {current_missing}")
-                logger.info(f"Improvement: {improvement} values ({improvement_percentage:.2f}% of initial missing)")
+                if self.verbose > 0:
+                    improvement_pct = (improvement / previous_missing * 100) if previous_missing > 0 else 0
+                    print(f"    Progress: {current_missing} missing values remaining ({improvement_pct:.2f}% improvement)")
                 
-                # Stop if we've converged or no more missing values
+                pbar.update(1)
+                pbar.set_postfix(missing=current_missing)
+                
                 if current_missing == 0:
-                    logger.info("All missing values have been imputed!")
+                    if self.verbose > 0:
+                        print("    All missing values have been imputed!")
+                    # Skip remaining iterations for this stage
+                    pbar.update(self.max_iterations - (iteration + 1))
                     break
-                    
+                
                 if improvement == 0:
-                    logger.info(f"No improvement in this iteration, continuing to next confidence level")
+                    # Skip remaining iterations for this stage
+                    pbar.update(self.max_iterations - (iteration + 1))
                     break
                     
                 previous_missing = current_missing
             
-            # Check if making progress at this confidence level
-            conf_current_missing = df_result.isna().sum().sum()
-            conf_improvement = conf_previous_missing - conf_current_missing
-            logger.info(f"Improvement at {confidence_level} confidence level: {conf_improvement} values")
-            
-            # Break early if all values imputed
-            if conf_current_missing == 0:
-                logger.info("All missing values have been imputed!")
+            if df_result.isna().sum().sum() == 0:
                 break
         
-        # Final pass to clean up any remaining missing values with mode/median
+        pbar.close()
+        
+        # Final pass to clean up any remaining missing values
         remaining_missing = df_result.isna().sum().sum()
         if remaining_missing > 0:
-            logger.info(f"Final cleanup for {remaining_missing} remaining missing values...")
-            
-            # For each column with missing values
             for col in df_result.columns[df_result.isna().any()]:
                 if pd.api.types.is_numeric_dtype(df_result[col]):
-                    # Fill numeric with median
                     fill_value = df_result[col].median()
                     if pd.notna(fill_value):
                         df_result[col].fillna(fill_value, inplace=True)
-                        confidence.loc[df_result[col].isna(), col] = 0.1  # Very low confidence
                 else:
-                    # Fill categorical with mode
                     if not df_result[col].dropna().empty:
                         fill_value = df_result[col].mode().iloc[0] if not df_result[col].mode().empty else None
                         if pd.notna(fill_value):
                             df_result[col].fillna(fill_value, inplace=True)
-                            confidence.loc[df_result[col].isna(), col] = 0.1  # Very low confidence
         
-        # Detailed analysis of remaining missing values
         self._report_missing_analysis(df_result)
-        
-        # Save confidence data as an attribute
         self.imputation_confidence = confidence
-        
-        # Force garbage collection
         gc.collect()
         
-        logger.info(f"Imputation complete. Final missing values: {df_result.isna().sum().sum()}")
+        final_missing = df_result.isna().sum().sum()
+        if self.verbose > 0:
+            print(f"✅ Imputation complete! Final missing values: {final_missing}")
+            print(f"📈 Total values imputed: {initial_missing - final_missing}")
         
         return df_result
         

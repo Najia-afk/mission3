@@ -25,4 +25,4 @@ ENV PYTHONUNBUFFERED=1
 EXPOSE 8888
 
 # Default command
-CMD ["jupyter", "lab", "--ip=0.0.0.0", "--port=8888", "--no-browser", "--allow-root", "--NotebookApp.token=''"]
+CMD ["jupyter", "lab", "--ip=0.0.0.0", "--port=8888", "--no-browser", "--allow-root", "--ServerApp.token=''", "--ServerApp.disable_check_xsrf=True"]

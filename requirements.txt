@@ -10,3 +10,5 @@ python-Levenshtein
 ipykernel
 jupyterlab
 nbconvert
+tqdm
+kneed

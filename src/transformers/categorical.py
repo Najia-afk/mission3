@@ -5,12 +5,13 @@ from sklearn.preprocessing import StandardScaler
 
 class CategoricalFeatureImputer(BaseEstimator, TransformerMixin):
     """Handle categorical features with KNN or mode imputation."""
-    def __init__(self, min_samples_for_knn=50, knn_neighbors=5, numerical_features=None):
+    def __init__(self, min_samples_for_knn=50, knn_neighbors=5, numerical_features=None, n_jobs=-1):
         self.min_samples_for_knn = min_samples_for_knn
         self.knn_neighbors = knn_neighbors
         self.column_imputers = {}
         self.valid_categories = {}
         self.numerical_features = numerical_features  # Related numerical features to use for KNN
+        self.n_jobs = n_jobs
         
     def fit(self, X, y=None):
         for col in X.columns:
@@ -68,31 +69,29 @@ class CategoricalFeatureImputer(BaseEstimator, TransformerMixin):
                     # Fill NAs in training and prediction data with column medians
                     for feat_col in num_features:
                         median_val = X_train[feat_col].median()
-                        X_train[feat_col] = X_train[feat_col].fillna(median_val)
-                        X_missing[feat_col] = X_missing[feat_col].fillna(median_val)
+                        X_train[feat_col] = X_train[feat_col].fillna(median_val or 0)
+                        X_missing[feat_col] = X_missing[feat_col].fillna(median_val or 0)
                     
                     # Apply scaling to normalize the features
                     scaler = StandardScaler()
                     X_train_scaled = scaler.fit_transform(X_train)
                     X_missing_scaled = scaler.transform(X_missing)
                     
-                    # Find K nearest neighbors for each missing value
-                    from sklearn.neighbors import NearestNeighbors
+                    # Use KNeighborsClassifier for vectorized prediction
+                    from sklearn.neighbors import KNeighborsClassifier
                     k_neighbors = min(self.knn_neighbors, len(X_train_scaled))
-                    nbrs = NearestNeighbors(n_neighbors=k_neighbors)
-                    nbrs.fit(X_train_scaled)
-                    distances, indices = nbrs.kneighbors(X_missing_scaled)
+                    knn = KNeighborsClassifier(n_neighbors=k_neighbors, n_jobs=self.n_jobs)
+                    knn.fit(X_train_scaled, y_train)
                     
-                    # Get imputed values based on nearest neighbors
-                    missing_indices = X[missing_mask].index
-                    
-                    for i, idx in enumerate(missing_indices):
-                        # Get values from nearest neighbors
-                        neighbor_indices = indices[i]
-                        neighbor_values = y_train.iloc[neighbor_indices].values
-                        # Find most common value
-                        imputed_val = pd.Series(neighbor_values).value_counts().index[0]
-                        X.loc[idx, target_col] = imputed_val
+                    # Predict in batches if too large to avoid memory issues
+                    if len(X_missing_scaled) > 10000:
+                        predictions = []
+                        for i in range(0, len(X_missing_scaled), 10000):
+                            batch = X_missing_scaled[i:i+10000]
+                            predictions.extend(knn.predict(batch))
+                        X.loc[missing_mask, target_col] = predictions
+                    else:
+                        X.loc[missing_mask, target_col] = knn.predict(X_missing_scaled)
         
         # Apply mode imputation for any remaining missing values
         X[target_col] = X[target_col].fillna(self.column_imputers[target_col])

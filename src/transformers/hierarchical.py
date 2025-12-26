@@ -43,18 +43,14 @@ class EnhancedHierarchicalImputer(BaseEstimator, TransformerMixin):
                     parent_child_map = self.parent_child_mappings[(parent_col, child_col)]
                     child_parent_map = self.child_parent_mappings[(parent_col, child_col)]
                     
-                    # Impute child based on parent
+                    # Impute child based on parent (Vectorized)
                     mask_parent = X_out[parent_col].notna() & X_out[child_col].isna()
-                    for idx in X_out[mask_parent].index:
-                        parent_val = X_out.loc[idx, parent_col]
-                        if parent_val in parent_child_map:
-                            X_out.loc[idx, child_col] = parent_child_map[parent_val]
+                    if mask_parent.any():
+                        X_out.loc[mask_parent, child_col] = X_out.loc[mask_parent, parent_col].map(parent_child_map)
                     
-                    # Impute parent based on child
+                    # Impute parent based on child (Vectorized)
                     mask_child = X_out[child_col].notna() & X_out[parent_col].isna()
-                    for idx in X_out[mask_child].index:
-                        child_val = X_out.loc[idx, child_col]
-                        if child_val in child_parent_map:
-                            X_out.loc[idx, parent_col] = child_parent_map[child_val]
+                    if mask_child.any():
+                        X_out.loc[mask_child, parent_col] = X_out.loc[mask_child, child_col].map(child_parent_map)
         
         return X_out
